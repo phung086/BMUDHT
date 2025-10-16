@@ -1,0 +1,2 @@
+{"level":"info","message":"Server running on port 3001","service":"fintech-backend","timestamp":"2025-10-15T16:00:47.948Z"}
+{"level":"info","message":"Database connected","service":"fintech-backend","timestamp":"2025-10-15T16:00:47.954Z"}
