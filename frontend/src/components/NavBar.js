@@ -1,11 +1,13 @@
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import LogoutConfirmModal from "./LogoutConfirmModal";
+import NotificationContext from "../context/NotificationContext";
 
 const NavBar = () => {
   const [showLogout, setShowLogout] = useState(false);
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
+  const { unreadCount } = useContext(NotificationContext);
   // simple user display from token payload if available
   const getInitials = () => {
     try {
@@ -60,6 +62,13 @@ const NavBar = () => {
                 Dashboard
               </Link>
             </li>
+            {token && (
+              <li className="nav-item">
+                <Link className="nav-link" to="/profile">
+                  Profile
+                </Link>
+              </li>
+            )}
             <li className="nav-item">
               <Link className="nav-link" to="/admin">
                 Admin
@@ -82,6 +91,20 @@ const NavBar = () => {
               </>
             ) : (
               <>
+                <li className="nav-item d-flex align-items-center me-3">
+                  <Link
+                    className="nav-link position-relative"
+                    to="/notifications"
+                    title="Thông báo"
+                  >
+                    <i className="bi bi-bell" aria-hidden></i>
+                    {unreadCount > 0 && (
+                      <span className="notification-badge">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
+                  </Link>
+                </li>
                 <li className="nav-item d-flex align-items-center me-2">
                   <div
                     className="bg-light text-primary rounded-circle"

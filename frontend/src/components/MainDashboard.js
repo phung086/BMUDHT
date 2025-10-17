@@ -1,0 +1,1165 @@
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useNavigate } from "react-router-dom";
+import api from "../services/api";
+import ConfirmModal from "./ConfirmModal";
+import Toast from "./Toast";
+import MfaSetup from "./MfaSetup";
+import TransactionDetailsModal from "./TransactionDetailsModal";
+import NotificationContext from "../context/NotificationContext";
+import { usePreferences } from "../context/PreferencesContext";
+import { getReferenceCode } from "../utils/reference";
+
+const dictionary = {
+  vi: {
+    greeting: "Xin chào",
+    heroCaption: "Tài khoản · Số dư cập nhật theo thời gian thực",
+    balanceLabel: "Số dư khả dụng",
+    hideBalance: "Ẩn số dư",
+    showBalance: "Hiện số dư",
+    netChange: "Biến động ròng tháng này",
+    lastActivityPrefix: "Giao dịch gần nhất",
+    lastActivityEmpty: "Chưa có giao dịch nào được ghi nhận.",
+    quickActionsTitle: "Tác vụ nhanh",
+    quickActionsSubtitle: "Chọn thao tác thường xuyên chỉ với một chạm.",
+    modalDismiss: "Đã hiểu",
+    quickTransfer: "Chuyển khoản ngay",
+    quickViewNotifications: "Xem thông báo",
+    quickActions: {
+      transfer: {
+        label: "Chuyển khoản",
+        tagline: "Nội bộ & liên ngân hàng",
+        description:
+          "Chuyển tiền nhanh tới tài khoản nội bộ hoặc ngân hàng khác.",
+      },
+      deposit: {
+        label: "Nạp tiền",
+        tagline: "Qua thẻ và ví liên kết",
+        description: "Nạp tiền từ thẻ ghi nợ hoặc ví điện tử liên kết.",
+      },
+      mobile: {
+        label: "Nạp điện thoại",
+        tagline: "Áp dụng mọi nhà mạng",
+        description: "Mua thẻ cào hoặc nạp trực tiếp cho số điện thoại bất kỳ.",
+      },
+      bill: {
+        label: "Thanh toán hóa đơn",
+        tagline: "Điện, nước, Internet",
+        description: "Tự động thanh toán điện, nước, internet và truyền hình.",
+      },
+      travel: {
+        label: "Vé máy bay",
+        tagline: "Ưu đãi đối tác hàng không",
+        description: "Đặt vé máy bay nội địa và quốc tế với ưu đãi độc quyền.",
+      },
+      invest: {
+        label: "Đầu tư",
+        tagline: "Gửi tiết kiệm sinh lời",
+        description: "Mở tài khoản tiết kiệm hoặc danh mục đầu tư sinh lời.",
+      },
+      support: {
+        label: "Trợ giúp",
+        tagline: "Tổng đài 24/7",
+        description: "Liên hệ tổng đài 24/7 và chatbot tài chính thông minh.",
+      },
+      promo: {
+        label: "Ưu đãi",
+        tagline: "Hoàn tiền & voucher",
+        description: "Khám phá ưu đãi hoàn tiền và voucher mới nhất.",
+      },
+    },
+    depositTitle: "Nạp tiền vào tài khoản",
+    depositLimit: "Không giới hạn",
+    depositPlaceholder: "Số tiền nạp (VND)",
+    submitDeposit: "Nạp tiền",
+    transferTitle: "Chuyển khoản thông minh",
+    transferAccount: "Tài khoản nhận",
+    transferAmount: "Số tiền (VND)",
+    transferNote: "Ghi chú (không bắt buộc)",
+    submitTransfer: "Chuyển khoản",
+    processing: "Đang xử lý",
+    syncing: "Đang đồng bộ...",
+    depositSuccess: "Nạp tiền thành công",
+    depositFail: "Nạp tiền thất bại",
+    transferSuccess: "Chuyển khoản thành công",
+    transferFail: "Chuyển khoản thất bại",
+    analyticsTitle: "Tổng quan tháng này",
+    analyticsIncoming: "Tiền vào",
+    analyticsOutgoing: "Tiền ra",
+    analyticsPending: "Đang xử lý",
+    analyticsSecurity: "Tự động hóa bảo mật",
+    analyticsSecurityNote:
+      "Luồng giao dịch được giám sát thời gian thực với cảnh báo rủi ro bất thường.",
+    chartTitle: "Phân tích thu · chi 7 ngày",
+    chartLegendIn: "Thu",
+    chartLegendOut: "Chi",
+    statusCompleted: "Hoàn thành",
+    statusPending: "Đang xử lý",
+    statusFailed: "Thất bại",
+    recentTitle: "Giao dịch gần đây",
+    recentSubtitle: "Chạm để xem chi tiết và đánh dấu bất thường.",
+    recentEmpty: "Chưa có giao dịch nào.",
+    transactionType: {
+      deposit: "Nạp tiền",
+      transfer: "Chuyển khoản",
+      fallback: "Giao dịch",
+    },
+    badgeUp: "Tăng",
+    badgeDown: "Giảm",
+    transactionsFollow: "Giao dịch cần theo dõi",
+  },
+  en: {
+    greeting: "Welcome",
+    heroCaption: "Account · Real-time available balance",
+    balanceLabel: "Available balance",
+    hideBalance: "Hide balance",
+    showBalance: "Show balance",
+    netChange: "Net change this month",
+    lastActivityPrefix: "Latest transaction",
+    lastActivityEmpty: "No transactions recorded yet.",
+    quickActionsTitle: "Quick actions",
+    quickActionsSubtitle: "Access frequent operations in one tap.",
+    modalDismiss: "Got it",
+    quickTransfer: "Transfer now",
+    quickViewNotifications: "Notifications",
+    quickActions: {
+      transfer: {
+        label: "Transfer",
+        tagline: "Internal & interbank",
+        description:
+          "Send funds to an in-network or external bank account instantly.",
+      },
+      deposit: {
+        label: "Top up",
+        tagline: "Cards & linked wallets",
+        description: "Add funds using your debit card or linked e-wallets.",
+      },
+      mobile: {
+        label: "Mobile top-up",
+        tagline: "All carriers supported",
+        description: "Buy airtime vouchers or top up any mobile number.",
+      },
+      bill: {
+        label: "Bill payment",
+        tagline: "Utilities & internet",
+        description: "Automate electricity, water, broadband, and TV payments.",
+      },
+      travel: {
+        label: "Flights",
+        tagline: "Airline partner deals",
+        description:
+          "Book domestic and international flights with exclusive perks.",
+      },
+      invest: {
+        label: "Invest",
+        tagline: "Grow your savings",
+        description: "Open savings plans or curated investment portfolios.",
+      },
+      support: {
+        label: "Support",
+        tagline: "24/7 helpdesk",
+        description: "Reach our 24/7 contact center and smart finance chatbot.",
+      },
+      promo: {
+        label: "Rewards",
+        tagline: "Cashback & vouchers",
+        description:
+          "Discover the latest cashback offers and partner vouchers.",
+      },
+    },
+    depositTitle: "Top up account",
+    depositLimit: "Unlimited",
+    depositPlaceholder: "Top-up amount (VND)",
+    submitDeposit: "Top up",
+    transferTitle: "Smart transfers",
+    transferAccount: "Recipient account",
+    transferAmount: "Amount (VND)",
+    transferNote: "Note (optional)",
+    submitTransfer: "Transfer",
+    processing: "Processing",
+    syncing: "Syncing...",
+    depositSuccess: "Top-up successful",
+    depositFail: "Top-up failed",
+    transferSuccess: "Transfer successful",
+    transferFail: "Transfer failed",
+    analyticsTitle: "Monthly overview",
+    analyticsIncoming: "Cash in",
+    analyticsOutgoing: "Cash out",
+    analyticsPending: "Pending",
+    analyticsSecurity: "Security automation",
+    analyticsSecurityNote:
+      "Transactions are monitored in real time with anomaly alerts.",
+    chartTitle: "7-day income vs. expense",
+    chartLegendIn: "Income",
+    chartLegendOut: "Expense",
+    statusCompleted: "Completed",
+    statusPending: "Processing",
+    statusFailed: "Failed",
+    recentTitle: "Recent transactions",
+    recentSubtitle: "Tap to inspect details or flag anomalies.",
+    recentEmpty: "No transactions recorded.",
+    transactionType: {
+      deposit: "Deposit",
+      transfer: "Transfer",
+      fallback: "Transaction",
+    },
+    badgeUp: "Up",
+    badgeDown: "Down",
+    transactionsFollow: "Transactions to follow",
+  },
+};
+
+const quickActionCatalog = [
+  { key: "transfer", icon: "bi-arrow-left-right", accent: "action-transfer" },
+  { key: "deposit", icon: "bi-wallet2", accent: "action-deposit" },
+  { key: "mobile", icon: "bi-phone", accent: "action-mobile" },
+  { key: "bill", icon: "bi-receipt", accent: "action-bill" },
+  { key: "travel", icon: "bi-airplane", accent: "action-travel" },
+  { key: "invest", icon: "bi-graph-up-arrow", accent: "action-invest" },
+  { key: "support", icon: "bi-life-preserver", accent: "action-support" },
+  { key: "promo", icon: "bi-gift", accent: "action-promo" },
+];
+
+const maskAccount = (value) => {
+  if (!value) return "-";
+  if (value.length <= 4) return value;
+  return "****" + value.slice(-4);
+};
+
+const InfoModal = ({ show, title, description, primaryLabel, onClose }) => {
+  if (!show) return null;
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal-card">
+        <h5>{title}</h5>
+        <div className="modal-body">
+          <p className="mb-0">{description}</p>
+        </div>
+        <div className="modal-actions justify-content-end">
+          <button className="btn btn-primary" onClick={onClose}>
+            {primaryLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const useTokenProfile = (token) => {
+  // Extract lightweight profile information from the persisted JWT payload.
+  return useMemo(() => {
+    if (!token) return null;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1] || ""));
+      const displayName =
+        payload?.name ||
+        payload?.fullName ||
+        payload?.username ||
+        payload?.email?.split("@")[0] ||
+        "Khách hàng";
+      return { ...payload, displayName };
+    } catch (error) {
+      return null;
+    }
+  }, [token]);
+};
+
+const decorateTransactions = (items) =>
+  (items || []).map((tx) => ({ ...tx, reference: getReferenceCode(tx) }));
+
+const Dashboard = () => {
+  const navigate = useNavigate();
+  const token = localStorage.getItem("token");
+  const profile = useTokenProfile(token);
+  const { language } = usePreferences();
+  const text = dictionary[language] || dictionary.vi;
+
+  const [balance, setBalance] = useState(0);
+  const [transactions, setTransactions] = useState([]);
+  const [depositAmount, setDepositAmount] = useState("");
+  const [transferData, setTransferData] = useState({
+    toUsername: "",
+    amount: "",
+    description: "",
+  });
+  const [toast, setToast] = useState({
+    show: false,
+    type: "success",
+    message: "",
+  });
+  const [confirm, setConfirm] = useState({
+    show: false,
+    payload: null,
+    confirming: false,
+  });
+  const [dataLoading, setDataLoading] = useState(false);
+  const [depositLoading, setDepositLoading] = useState(false);
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [selectedTx, setSelectedTx] = useState(null);
+  const [showTxModal, setShowTxModal] = useState(false);
+  const [infoModal, setInfoModal] = useState({ show: false, key: null });
+  const [showBalance, setShowBalance] = useState(true);
+
+  const { refresh: refreshNotifications } = useContext(NotificationContext);
+
+  const depositRef = useRef(null);
+  const transferRef = useRef(null);
+
+  useEffect(() => {
+    if (!token) {
+      navigate("/login");
+    }
+  }, [token, navigate]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchHistory = async () => {
+      if (!token) return;
+      setDataLoading(true);
+      try {
+        const res = await api.get("/api/transactions/history");
+        if (!mounted) return;
+        setBalance(res.data?.balance || 0);
+        setTransactions(decorateTransactions(res.data?.transactions || []));
+      } catch (error) {
+        if (mounted) {
+          setToast({
+            show: true,
+            type: "error",
+            message:
+              error.response?.data?.error ||
+              (language === "vi"
+                ? "Không thể tải lịch sử giao dịch"
+                : "Unable to load history"),
+          });
+        }
+      } finally {
+        if (mounted) {
+          setDataLoading(false);
+        }
+      }
+    };
+
+    fetchHistory();
+
+    return () => {
+      mounted = false;
+    };
+  }, [token, language]);
+
+  const handleDepositChange = (event) => {
+    setDepositAmount(event.target.value);
+  };
+
+  const handleTransferChange = (event) => {
+    const { name, value } = event.target;
+    setTransferData((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleDepositSubmit = async (event) => {
+    event.preventDefault();
+    setDepositLoading(true);
+    try {
+      const res = await api.post("/api/transactions/deposit", {
+        amount: Number(depositAmount),
+      });
+      setToast({
+        show: true,
+        type: "success",
+        message: res.data?.message || text.depositSuccess,
+      });
+      setDepositAmount("");
+      const historyRes = await api.get("/api/transactions/history");
+      setBalance(historyRes.data?.balance || 0);
+      setTransactions(
+        decorateTransactions(historyRes.data?.transactions || [])
+      );
+      await refreshNotifications().catch(() => {});
+    } catch (error) {
+      setToast({
+        show: true,
+        type: "error",
+        message: error.response?.data?.error || text.depositFail,
+      });
+    } finally {
+      setDepositLoading(false);
+    }
+  };
+
+  const handleTransferSubmit = (event) => {
+    event.preventDefault();
+    setConfirm({ show: true, payload: { ...transferData }, confirming: false });
+  };
+
+  const confirmTransfer = async () => {
+    setConfirm((curr) => ({ ...curr, confirming: true }));
+    setTransferLoading(true);
+    try {
+      const payload = {
+        toUsername: confirm.payload?.toUsername,
+        amount: confirm.payload?.amount,
+        description: confirm.payload?.description,
+      };
+      const res = await api.post("/api/transactions/transfer", payload);
+      setToast({
+        show: true,
+        type: "success",
+        message: res.data?.message || text.transferSuccess,
+      });
+      setTransferData({ toUsername: "", amount: "", description: "" });
+      const historyRes = await api.get("/api/transactions/history");
+      setBalance(historyRes.data?.balance || 0);
+      setTransactions(
+        decorateTransactions(historyRes.data?.transactions || [])
+      );
+      await refreshNotifications().catch(() => {});
+    } catch (error) {
+      setToast({
+        show: true,
+        type: "error",
+        message: error.response?.data?.error || text.transferFail,
+      });
+    } finally {
+      setTransferLoading(false);
+      setConfirm({ show: false, payload: null, confirming: false });
+    }
+  };
+
+  const formatCurrency = useCallback(
+    (amount) => {
+      const locale = language === "vi" ? "vi-VN" : "en-US";
+      return Number(amount || 0).toLocaleString(locale, {
+        style: "currency",
+        currency: "VND",
+      });
+    },
+    [language]
+  );
+
+  const insightData = useMemo(() => {
+    if (!transactions.length) {
+      return {
+        monthlyIncoming: 0,
+        monthlyOutgoing: 0,
+        pendingCount: 0,
+        lastTransaction: null,
+      };
+    }
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const monthly = transactions.filter((tx) => {
+      const created = new Date(tx.createdAt);
+      return (
+        created.getMonth() === currentMonth &&
+        created.getFullYear() === currentYear
+      );
+    });
+
+    const monthlyIncoming = monthly
+      .filter((tx) => tx.type === "deposit")
+      .reduce((total, tx) => total + Number(tx.amount || 0), 0);
+
+    const monthlyOutgoing = monthly
+      .filter((tx) => tx.type === "transfer")
+      .reduce((total, tx) => total + Number(tx.amount || 0), 0);
+
+    const pendingCount = transactions.filter(
+      (tx) => tx.status === "pending"
+    ).length;
+
+    return {
+      monthlyIncoming,
+      monthlyOutgoing,
+      pendingCount,
+      lastTransaction: transactions[0] || null,
+    };
+  }, [transactions]);
+
+  const netChange = useMemo(
+    () => insightData.monthlyIncoming - insightData.monthlyOutgoing,
+    [insightData]
+  );
+
+  const heroMetrics = useMemo(
+    () => [
+      {
+        key: "incoming",
+        label: text.analyticsIncoming,
+        value: insightData.monthlyIncoming,
+        tone: "positive",
+        caption:
+          language === "vi"
+            ? "Tổng tiền nhận trong kỳ"
+            : "Total inbound this month",
+      },
+      {
+        key: "outgoing",
+        label: text.analyticsOutgoing,
+        value: insightData.monthlyOutgoing,
+        tone: "negative",
+        caption:
+          language === "vi"
+            ? "Tổng tiền chi trong kỳ"
+            : "Total outbound this month",
+      },
+      {
+        key: "pending",
+        label: text.analyticsPending,
+        value: insightData.pendingCount,
+        tone: "neutral",
+        caption: text.transactionsFollow,
+      },
+    ],
+    [insightData, text, language]
+  );
+
+  const recentTransactions = useMemo(
+    () => transactions.slice(0, 6),
+    [transactions]
+  );
+
+  const dailyStats = useMemo(() => {
+    const today = new Date();
+    const template = Array.from({ length: 7 }).map((_, index) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() - (6 - index));
+      return {
+        key: date.toISOString(),
+        date,
+        incoming: 0,
+        outgoing: 0,
+        label: date.toLocaleDateString(language === "vi" ? "vi-VN" : "en-US", {
+          weekday: "short",
+        }),
+        tooltip: date.toLocaleDateString(
+          language === "vi" ? "vi-VN" : "en-US",
+          {
+            weekday: "long",
+            day: "2-digit",
+            month: "2-digit",
+          }
+        ),
+      };
+    });
+
+    if (!transactions.length) {
+      return template;
+    }
+
+    const buckets = template.reduce((acc, item) => {
+      acc[item.date.toDateString()] = item;
+      return acc;
+    }, {});
+
+    transactions.forEach((tx) => {
+      const created = new Date(tx.createdAt);
+      const bucket = buckets[created.toDateString()];
+      if (!bucket) return;
+      const amount = Number(tx.amount || 0);
+      if (tx.type === "deposit") {
+        bucket.incoming += amount;
+      } else if (tx.type === "transfer") {
+        bucket.outgoing += amount;
+      }
+    });
+
+    return template;
+  }, [transactions, language]);
+
+  const chartMax = useMemo(() => {
+    const values = dailyStats.flatMap((item) => [item.incoming, item.outgoing]);
+    const max = Math.max(...values, 0);
+    return max === 0 ? 1 : max;
+  }, [dailyStats]);
+
+  const handleQuickAction = useCallback((action) => {
+    if (action.key === "deposit") {
+      depositRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      return;
+    }
+    if (action.key === "transfer") {
+      transferRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      return;
+    }
+    setInfoModal({ show: true, key: action.key });
+  }, []);
+
+  const closeInfoModal = useCallback(() => {
+    setInfoModal({ show: false, key: null });
+  }, []);
+
+  const formatTimestamp = useCallback(
+    (timestamp) =>
+      new Date(timestamp).toLocaleString(
+        language === "vi" ? "vi-VN" : "en-US",
+        {
+          hour: "2-digit",
+          minute: "2-digit",
+          day: "2-digit",
+          month: "2-digit",
+        }
+      ),
+    [language]
+  );
+
+  const statusLabel = (status) => {
+    if (status === "completed") return text.statusCompleted;
+    if (status === "pending") return text.statusPending;
+    return text.statusFailed;
+  };
+
+  const transactionLabel = (type) => {
+    if (type === "deposit") return text.transactionType.deposit;
+    if (type === "transfer") return text.transactionType.transfer;
+    return text.transactionType.fallback;
+  };
+
+  const toggleBalance = () => setShowBalance((prev) => !prev);
+
+  const modalCopy = infoModal.key ? text.quickActions[infoModal.key] : null;
+
+  const confirmTitle = confirm.payload
+    ? language === "vi"
+      ? `Xác nhận chuyển ${confirm.payload.amount || ""} VND`
+      : `Confirm transfer of ${confirm.payload.amount || ""} VND`
+    : "";
+
+  const confirmBodyIntro = confirm.payload
+    ? language === "vi"
+      ? `Bạn sẽ chuyển ${confirm.payload.amount} tới ${confirm.payload.toUsername}.`
+      : `You are about to send ${confirm.payload.amount} to ${confirm.payload.toUsername}.`
+    : "";
+
+  const confirmNoteLabel = language === "vi" ? "Ghi chú" : "Note";
+  const confirmPrompt =
+    language === "vi"
+      ? "Bạn có chắc chắn muốn tiếp tục?"
+      : "Are you sure you want to continue?";
+
+  return (
+    <div className="dashboard-page">
+      <InfoModal
+        show={infoModal.show}
+        title={modalCopy?.label || ""}
+        description={modalCopy?.description || ""}
+        primaryLabel={text.modalDismiss}
+        onClose={closeInfoModal}
+      />
+
+      <ConfirmModal
+        show={confirm.show}
+        title={confirmTitle}
+        body={
+          <div>
+            <p>{confirmBodyIntro}</p>
+            {confirm.payload?.description && (
+              <p className="mb-0">
+                {confirmNoteLabel}: {confirm.payload.description}
+              </p>
+            )}
+            <p>{confirmPrompt}</p>
+          </div>
+        }
+        onConfirm={confirmTransfer}
+        onCancel={() =>
+          setConfirm({ show: false, payload: null, confirming: false })
+        }
+        confirming={confirm.confirming}
+      />
+
+      <Toast
+        show={toast.show}
+        type={toast.type}
+        message={toast.message}
+        onClose={() => setToast((curr) => ({ ...curr, show: false }))}
+      />
+
+      <section className="dashboard-hero gradient-card mb-4">
+        <div className="dashboard-hero__grid">
+          <div className="dashboard-hero__main">
+            <div className="hero-header">
+              <div className="hero-avatar">
+                <i className="bi bi-person-fill" aria-hidden></i>
+              </div>
+              <div>
+                <span className="hero-subheading">{text.greeting}</span>
+                <h1 className="hero-title">
+                  {profile?.displayName || "Khách hàng"}
+                </h1>
+                <p className="hero-caption">
+                  {text.heroCaption} ·{" "}
+                  {maskAccount(profile?.username || profile?.email || "")}
+                </p>
+              </div>
+            </div>
+            <div className="hero-balance">
+              <span className="hero-balance__label">{text.balanceLabel}</span>
+              <div className="hero-balance__value">
+                {showBalance ? formatCurrency(balance) : "•••••••• VND"}
+              </div>
+              <div className="hero-balance__trend">
+                <span
+                  className={
+                    netChange >= 0 ? "trend-positive" : "trend-negative"
+                  }
+                >
+                  {netChange >= 0 ? "+" : "-"}
+                  {formatCurrency(Math.abs(netChange))}
+                </span>
+                <small>{text.netChange}</small>
+              </div>
+              <button
+                type="button"
+                className="hero-balance__toggle"
+                onClick={toggleBalance}
+              >
+                <i
+                  className={`bi ${
+                    showBalance ? "bi-eye-slash" : "bi-eye"
+                  } me-2`}
+                  aria-hidden
+                ></i>
+                {showBalance ? text.hideBalance : text.showBalance}
+              </button>
+              {dataLoading && (
+                <span className="badge bg-light text-primary mt-2">
+                  {text.syncing}
+                </span>
+              )}
+            </div>
+            <div className="hero-actions">
+              <button
+                type="button"
+                className="btn btn-light hero-action"
+                onClick={() => handleQuickAction({ key: "transfer" })}
+              >
+                <i className="bi bi-arrow-left-right me-2" aria-hidden></i>
+                {text.quickTransfer}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-light hero-action"
+                onClick={() => navigate("/notifications")}
+              >
+                <i className="bi bi-bell me-2" aria-hidden></i>
+                {text.quickViewNotifications}
+              </button>
+            </div>
+            <div className="hero-meta">
+              {insightData.lastTransaction ? (
+                <div className="hero-meta__item">
+                  <i className="bi bi-lightning-charge-fill" aria-hidden></i>
+                  {text.lastActivityPrefix} ·{" "}
+                  {formatTimestamp(insightData.lastTransaction.createdAt)} ·{" "}
+                  {transactionLabel(insightData.lastTransaction.type)}{" "}
+                  {formatCurrency(insightData.lastTransaction.amount)}
+                </div>
+              ) : (
+                <div className="hero-meta__item">{text.lastActivityEmpty}</div>
+              )}
+            </div>
+          </div>
+          <div className="dashboard-hero__side">
+            {heroMetrics.map((metric) => (
+              <div
+                className={`hero-metric hero-metric--${metric.tone}`}
+                key={metric.key}
+              >
+                <span className="hero-metric__label">{metric.label}</span>
+                <div className="hero-metric__value">
+                  {metric.key === "pending"
+                    ? `${metric.value} ${
+                        language === "vi" ? "giao dịch" : "tx"
+                      }`
+                    : formatCurrency(metric.value)}
+                </div>
+                <small className="hero-metric__caption">{metric.caption}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="card shadow-sm quick-actions-card mb-4">
+        <div className="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <h5 className="mb-0">{text.quickActionsTitle}</h5>
+            <small className="text-muted">{text.quickActionsSubtitle}</small>
+          </div>
+          <span className="badge bg-primary-subtle text-primary">
+            Digital Banking
+          </span>
+        </div>
+        <div className="card-body">
+          <div className="row row-cols-2 row-cols-md-4 g-3">
+            {quickActionCatalog.map((action) => {
+              const copy = text.quickActions[action.key];
+              return (
+                <div className="col" key={action.key}>
+                  <button
+                    type="button"
+                    className={`quick-action-tile ${action.accent}`}
+                    onClick={() => handleQuickAction(action)}
+                  >
+                    <span className="quick-action-tile__icon">
+                      <i className={`bi ${action.icon}`} aria-hidden></i>
+                    </span>
+                    <span className="quick-action-tile__content">
+                      <span className="quick-action-tile__label">
+                        {copy?.label}
+                      </span>
+                      <small className="quick-action-tile__tagline">
+                        {copy?.tagline}
+                      </small>
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <div className="row g-4 mb-4">
+        <div className="col-xl-7">
+          <div className="card shadow-sm mb-4" ref={depositRef}>
+            <div className="card-header d-flex justify-content-between align-items-center">
+              <h5 className="mb-0">{text.depositTitle}</h5>
+              <span className="badge bg-primary-subtle text-primary">
+                {text.depositLimit}
+              </span>
+            </div>
+            <div className="card-body">
+              <form onSubmit={handleDepositSubmit} className="form-stacked">
+                <div className="form-floating">
+                  <input
+                    id="depositAmount"
+                    name="depositAmount"
+                    type="number"
+                    min="1000"
+                    step="1000"
+                    value={depositAmount}
+                    onChange={handleDepositChange}
+                    className="form-control"
+                    placeholder={text.depositPlaceholder}
+                    required
+                  />
+                  <label htmlFor="depositAmount">
+                    {text.depositPlaceholder}
+                  </label>
+                </div>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={depositLoading}
+                >
+                  {depositLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden
+                      ></span>
+                      {text.processing}
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-wallet2 me-2" aria-hidden></i>
+                      {text.submitDeposit}
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div className="card shadow-sm" ref={transferRef}>
+            <div className="card-header">
+              <h5 className="mb-0">{text.transferTitle}</h5>
+            </div>
+            <div className="card-body">
+              <form onSubmit={handleTransferSubmit} className="form-stacked">
+                <div className="row g-3">
+                  <div className="col-12 col-md-6">
+                    <div className="form-floating">
+                      <input
+                        id="toUsername"
+                        name="toUsername"
+                        value={transferData.toUsername}
+                        onChange={handleTransferChange}
+                        className="form-control"
+                        placeholder={text.transferAccount}
+                        required
+                      />
+                      <label htmlFor="toUsername">{text.transferAccount}</label>
+                    </div>
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <div className="form-floating">
+                      <input
+                        id="transferAmount"
+                        name="amount"
+                        type="number"
+                        min="1000"
+                        step="1000"
+                        value={transferData.amount}
+                        onChange={handleTransferChange}
+                        className="form-control"
+                        placeholder={text.transferAmount}
+                        required
+                      />
+                      <label htmlFor="transferAmount">
+                        {text.transferAmount}
+                      </label>
+                    </div>
+                  </div>
+                  <div className="col-12">
+                    <div className="form-floating">
+                      <input
+                        id="transferDescription"
+                        name="description"
+                        value={transferData.description}
+                        onChange={handleTransferChange}
+                        className="form-control"
+                        placeholder={text.transferNote}
+                      />
+                      <label htmlFor="transferDescription">
+                        {text.transferNote}
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="btn btn-primary mt-3"
+                  disabled={transferLoading}
+                >
+                  {transferLoading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden
+                      ></span>
+                      {text.processing}
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-send me-2" aria-hidden></i>
+                      {text.submitTransfer}
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-xl-5">
+          <div className="card shadow-sm mb-4">
+            <div className="card-header d-flex justify-content-between align-items-center">
+              <h5 className="mb-0">{text.analyticsTitle}</h5>
+              <span
+                className={`balance-chip ${
+                  netChange >= 0 ? "balance-chip--up" : "balance-chip--down"
+                }`}
+              >
+                {netChange >= 0 ? text.badgeUp : text.badgeDown}{" "}
+                {formatCurrency(Math.abs(netChange))}
+              </span>
+            </div>
+            <div className="card-body">
+              <div className="insight-grid">
+                <div className="insight-item">
+                  <span className="insight-label text-muted">
+                    {text.analyticsIncoming}
+                  </span>
+                  <div className="insight-value text-success">
+                    {formatCurrency(insightData.monthlyIncoming)}
+                  </div>
+                </div>
+                <div className="insight-item">
+                  <span className="insight-label text-muted">
+                    {text.analyticsOutgoing}
+                  </span>
+                  <div className="insight-value text-danger">
+                    {formatCurrency(insightData.monthlyOutgoing)}
+                  </div>
+                </div>
+                <div className="insight-item">
+                  <span className="insight-label text-muted">
+                    {text.analyticsPending}
+                  </span>
+                  <div className="insight-value">
+                    {insightData.pendingCount}{" "}
+                    {language === "vi" ? "giao dịch" : "tx"}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 p-3 bg-light rounded">
+                <p className="mb-1 fw-semibold">{text.analyticsSecurity}</p>
+                <small className="text-muted">
+                  {text.analyticsSecurityNote}
+                </small>
+              </div>
+            </div>
+          </div>
+
+          <div className="card shadow-sm mb-4 chart-card">
+            <div className="card-header d-flex justify-content-between align-items-center">
+              <h5 className="mb-0">{text.chartTitle}</h5>
+              <div className="chart-legend">
+                <span className="legend-dot legend-dot--in"></span>
+                <small>{text.chartLegendIn}</small>
+                <span className="legend-dot legend-dot--out"></span>
+                <small>{text.chartLegendOut}</small>
+              </div>
+            </div>
+            <div className="card-body">
+              <div className="chart-bars">
+                {dailyStats.map((day) => {
+                  const incomeHeight = Math.max(
+                    4,
+                    Math.round((day.incoming / chartMax) * 100)
+                  );
+                  const expenseHeight = Math.max(
+                    4,
+                    Math.round((day.outgoing / chartMax) * 100)
+                  );
+                  return (
+                    <div className="chart-bars__column" key={day.key}>
+                      <div className="chart-bars__stack">
+                        <div
+                          className="chart-bar chart-bar--incoming"
+                          style={{ height: `${incomeHeight}%` }}
+                          title={`${text.chartLegendIn} ${formatCurrency(
+                            day.incoming
+                          )} · ${day.tooltip}`}
+                        ></div>
+                        <div
+                          className="chart-bar chart-bar--outgoing"
+                          style={{ height: `${expenseHeight}%` }}
+                          title={`${text.chartLegendOut} ${formatCurrency(
+                            day.outgoing
+                          )} · ${day.tooltip}`}
+                        ></div>
+                      </div>
+                      <span className="chart-bars__label">{day.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="card shadow-sm security-card">
+            <div className="card-header border-0">
+              <h5 className="mb-0">
+                {language === "vi" ? "Bảo mật đa lớp" : "Multi-layer security"}
+              </h5>
+            </div>
+            <div className="card-body">
+              <div className="security-card__content">
+                <MfaSetup />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section className="card shadow-sm">
+        <div className="card-header d-flex justify-content-between align-items-center">
+          <h5 className="mb-0">{text.recentTitle}</h5>
+          <small className="text-muted">{text.recentSubtitle}</small>
+        </div>
+        <div className="list-group list-group-flush">
+          {recentTransactions.length === 0 ? (
+            <div className="list-group-item text-muted text-center py-4">
+              {text.recentEmpty}
+            </div>
+          ) : (
+            recentTransactions.map((tx) => {
+              const label = transactionLabel(tx.type);
+              const statusText = statusLabel(tx.status);
+              const statusClass =
+                statusText === text.statusCompleted
+                  ? "badge bg-success-subtle text-success"
+                  : statusText === text.statusPending
+                  ? "badge bg-warning-subtle text-warning"
+                  : "badge bg-danger-subtle text-danger";
+              return (
+                <button
+                  key={tx.id}
+                  type="button"
+                  className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                  onClick={() => {
+                    setSelectedTx(tx);
+                    setShowTxModal(true);
+                  }}
+                >
+                  <div className="d-flex align-items-center gap-3">
+                    <span className={`transaction-icon ${tx.type}`}>
+                      <i
+                        className={`bi ${
+                          tx.type === "deposit"
+                            ? "bi-arrow-down-circle"
+                            : "bi-arrow-up-circle"
+                        }`}
+                        aria-hidden
+                      ></i>
+                    </span>
+                    <div>
+                      <div className="fw-semibold">
+                        {label} · {tx.reference}
+                      </div>
+                      <small className="text-muted">
+                        {maskAccount(tx.fromUsername)} →{" "}
+                        {maskAccount(tx.toUsername)} ·{" "}
+                        {formatTimestamp(tx.createdAt)}
+                      </small>
+                    </div>
+                  </div>
+                  <div className="text-end">
+                    <div
+                      className={
+                        tx.type === "deposit" ? "text-success" : "text-danger"
+                      }
+                    >
+                      {tx.type === "deposit" ? "+" : "-"}
+                      {formatCurrency(tx.amount)}
+                    </div>
+                    <span className={statusClass}>{statusText}</span>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      <TransactionDetailsModal
+        tx={selectedTx}
+        show={showTxModal}
+        onClose={() => setShowTxModal(false)}
+      />
+    </div>
+  );
+};
+
+export default Dashboard;
