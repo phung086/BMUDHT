@@ -55,7 +55,7 @@ const dictionary = {
       },
       travel: {
         label: "Vé máy bay",
-        tagline: "Ưu đãi đối tác hàng không",
+        tagline: "Đối tác hàng không",
         description: "Đặt vé máy bay nội địa và quốc tế với ưu đãi độc quyền.",
       },
       invest: {
@@ -113,6 +113,18 @@ const dictionary = {
     badgeUp: "Tăng",
     badgeDown: "Giảm",
     transactionsFollow: "Giao dịch cần theo dõi",
+    analyticsSuccessRate: "Tỉ lệ thành công",
+    analyticsFailed: "Giao dịch lỗi",
+    analyticsAvgTicket: "Giá trị bình quân",
+    analyticsLargest: "Giao dịch lớn nhất",
+    analyticsNoData: "Chưa có dữ liệu",
+    profileLoading: "Đang cập nhật hồ sơ...",
+    profileRoleAdmin: "Quản trị viên hệ thống",
+    profileRoleUser: "Khách hàng cá nhân",
+    profileRoleStaff: "Chuyên viên hỗ trợ",
+    profileMissing: "Chưa có thông tin hồ sơ",
+    profileEmailLabel: "Email bảo mật",
+    profileUsernameLabel: "Tên đăng nhập",
   },
   en: {
     greeting: "Welcome",
@@ -212,6 +224,18 @@ const dictionary = {
     badgeUp: "Up",
     badgeDown: "Down",
     transactionsFollow: "Transactions to follow",
+    analyticsSuccessRate: "Success rate",
+    analyticsFailed: "Failed transactions",
+    analyticsAvgTicket: "Average ticket",
+    analyticsLargest: "Largest transaction",
+    analyticsNoData: "No data yet",
+    profileLoading: "Syncing profile...",
+    profileRoleAdmin: "Platform administrator",
+    profileRoleUser: "Retail customer",
+    profileRoleStaff: "Support specialist",
+    profileMissing: "Profile details unavailable",
+    profileEmailLabel: "Secure email",
+    profileUsernameLabel: "Username",
   },
 };
 
@@ -230,6 +254,18 @@ const maskAccount = (value) => {
   if (!value) return "-";
   if (value.length <= 4) return value;
   return "****" + value.slice(-4);
+};
+
+const maskIdentifier = (value) => {
+  if (!value) return "-";
+  if (value.includes("@")) {
+    const [local, domain] = value.split("@");
+    if (local.length <= 2) {
+      return `**@${domain}`;
+    }
+    return `${local.slice(0, 2)}***@${domain}`;
+  }
+  return maskAccount(value);
 };
 
 const InfoModal = ({ show, title, description, primaryLabel, onClose }) => {
@@ -283,6 +319,9 @@ const Dashboard = () => {
 
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
+  const [userProfile, setUserProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState(null);
   const [depositAmount, setDepositAmount] = useState("");
   const [transferData, setTransferData] = useState({
     toUsername: "",
@@ -352,6 +391,43 @@ const Dashboard = () => {
 
     return () => {
       mounted = false;
+    };
+  }, [token, language]);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    const fetchProfile = async () => {
+      setProfileLoading(true);
+      try {
+        const res = await api.get("/api/auth/me");
+        if (cancelled) return;
+        setUserProfile(res.data?.user || null);
+        setProfileError(null);
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error.response?.data?.error ||
+          (language === "vi"
+            ? "Không thể tải hồ sơ người dùng"
+            : "Unable to load user profile");
+        setProfileError(message);
+        setToast({
+          show: true,
+          type: "error",
+          message,
+        });
+      } finally {
+        if (!cancelled) {
+          setProfileLoading(false);
+        }
+      }
+    };
+
+    fetchProfile();
+
+    return () => {
+      cancelled = true;
     };
   }, [token, language]);
 
@@ -482,6 +558,45 @@ const Dashboard = () => {
       monthlyOutgoing,
       pendingCount,
       lastTransaction: transactions[0] || null,
+    };
+  }, [transactions]);
+
+  const advancedInsights = useMemo(() => {
+    if (!transactions.length) {
+      return {
+        successRate: 100,
+        completed: 0,
+        failed: 0,
+        averageTicket: 0,
+        largestTx: null,
+      };
+    }
+    const completedTx = transactions.filter((tx) => tx.status === "completed");
+    const failedTx = transactions.filter((tx) => tx.status === "failed");
+    const successRate =
+      completedTx.length + failedTx.length === 0
+        ? 100
+        : (completedTx.length / (completedTx.length + failedTx.length)) * 100;
+    const averageTicket =
+      completedTx.length === 0
+        ? 0
+        : completedTx.reduce(
+            (sum, tx) => sum + Math.abs(Number(tx.amount || 0)),
+            0
+          ) / completedTx.length;
+    const largestTx = transactions.reduce((largest, tx) => {
+      const amount = Math.abs(Number(tx.amount || 0));
+      if (!largest || amount > largest.amount) {
+        return { ...tx, amount };
+      }
+      return largest;
+    }, null);
+    return {
+      successRate,
+      completed: completedTx.length,
+      failed: failedTx.length,
+      averageTicket,
+      largestTx,
     };
   }, [transactions]);
 
@@ -634,6 +749,50 @@ const Dashboard = () => {
 
   const modalCopy = infoModal.key ? text.quickActions[infoModal.key] : null;
 
+  const heroName = useMemo(() => {
+    return (
+      userProfile?.fullName ||
+      userProfile?.name ||
+      userProfile?.username ||
+      profile?.displayName ||
+      (language === "vi" ? "Người dùng" : "User")
+    );
+  }, [userProfile, profile, language]);
+
+  const avatarInitial = useMemo(() => {
+    if (!heroName) return null;
+    return heroName.trim().charAt(0).toUpperCase();
+  }, [heroName]);
+
+  const heroIdentifier = useMemo(() => {
+    const source =
+      userProfile?.email ||
+      userProfile?.username ||
+      profile?.email ||
+      profile?.username ||
+      "";
+    return source ? maskIdentifier(source) : "";
+  }, [userProfile, profile]);
+
+  const profileRoleLabel = useMemo(() => {
+    if (!userProfile?.role) return text.profileRoleUser;
+    if (userProfile.role === "admin") return text.profileRoleAdmin;
+    if (userProfile.role === "staff") return text.profileRoleStaff;
+    return text.profileRoleUser;
+  }, [userProfile, text]);
+
+  const formatPercent = useCallback(
+    (value) => {
+      const locale = language === "vi" ? "vi-VN" : "en-US";
+      return Number(value / 100).toLocaleString(locale, {
+        style: "percent",
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      });
+    },
+    [language]
+  );
+
   const confirmTitle = confirm.payload
     ? language === "vi"
       ? `Xác nhận chuyển ${confirm.payload.amount || ""} VND`
@@ -695,16 +854,25 @@ const Dashboard = () => {
           <div className="dashboard-hero__main">
             <div className="hero-header">
               <div className="hero-avatar">
-                <i className="bi bi-person-fill" aria-hidden></i>
+                {avatarInitial ? (
+                  <span className="hero-avatar__initial">{avatarInitial}</span>
+                ) : (
+                  <i className="bi bi-person-fill" aria-hidden></i>
+                )}
               </div>
               <div>
                 <span className="hero-subheading">{text.greeting}</span>
-                <h1 className="hero-title">
-                  {profile?.displayName || "Khách hàng"}
-                </h1>
+                <h1 className="hero-title">{heroName}</h1>
                 <p className="hero-caption">
-                  {text.heroCaption} ·{" "}
-                  {maskAccount(profile?.username || profile?.email || "")}
+                  {text.heroCaption}
+                  {heroIdentifier && (
+                    <>
+                      {" · "}
+                      <span className="hero-caption__meta">
+                        {heroIdentifier}
+                      </span>
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -762,6 +930,18 @@ const Dashboard = () => {
               </button>
             </div>
             <div className="hero-meta">
+              {profileLoading && (
+                <div className="hero-meta__item">
+                  <i className="bi bi-arrow-repeat" aria-hidden></i>
+                  {text.profileLoading}
+                </div>
+              )}
+              {profileError && (
+                <div className="hero-meta__item text-warning">
+                  <i className="bi bi-exclamation-triangle" aria-hidden></i>
+                  {profileError}
+                </div>
+              )}
               {insightData.lastTransaction ? (
                 <div className="hero-meta__item">
                   <i className="bi bi-lightning-charge-fill" aria-hidden></i>
@@ -772,6 +952,23 @@ const Dashboard = () => {
                 </div>
               ) : (
                 <div className="hero-meta__item">{text.lastActivityEmpty}</div>
+              )}
+              <div className="hero-meta__item">
+                <i className="bi bi-shield-lock" aria-hidden></i>
+                {profileRoleLabel}
+              </div>
+              {userProfile?.email && (
+                <div className="hero-meta__item">
+                  <i className="bi bi-envelope-open" aria-hidden></i>
+                  {text.profileEmailLabel}: {maskIdentifier(userProfile.email)}
+                </div>
+              )}
+              {userProfile?.username && (
+                <div className="hero-meta__item">
+                  <i className="bi bi-person-badge" aria-hidden></i>
+                  {text.profileUsernameLabel}:{" "}
+                  {maskIdentifier(userProfile.username)}
+                </div>
               )}
             </div>
           </div>
@@ -1010,6 +1207,53 @@ const Dashboard = () => {
                     {insightData.pendingCount}{" "}
                     {language === "vi" ? "giao dịch" : "tx"}
                   </div>
+                </div>
+              </div>
+              <div className="insight-flush">
+                <div className="insight-flush__item">
+                  <span className="insight-label text-muted">
+                    {text.analyticsSuccessRate}
+                  </span>
+                  <div className="insight-flush__value">
+                    {formatPercent(advancedInsights.successRate)}
+                  </div>
+                  <small className="text-muted">
+                    {language === "vi"
+                      ? `${advancedInsights.completed} hoàn tất / ${advancedInsights.failed} lỗi`
+                      : `${advancedInsights.completed} completed / ${advancedInsights.failed} failed`}
+                  </small>
+                </div>
+                <div className="insight-flush__item">
+                  <span className="insight-label text-muted">
+                    {text.analyticsAvgTicket}
+                  </span>
+                  <div className="insight-flush__value text-primary">
+                    {formatCurrency(advancedInsights.averageTicket)}
+                  </div>
+                  <small className="text-muted">
+                    {language === "vi"
+                      ? "Giá trị trung bình giao dịch hoàn tất"
+                      : "Average settled transaction value"}
+                  </small>
+                </div>
+                <div className="insight-flush__item insight-flush__item--wide">
+                  <span className="insight-label text-muted">
+                    {text.analyticsLargest}
+                  </span>
+                  {advancedInsights.largestTx ? (
+                    <>
+                      <div className="insight-flush__value text-success">
+                        {formatCurrency(advancedInsights.largestTx.amount)}
+                      </div>
+                      <small className="text-muted">
+                        {transactionLabel(advancedInsights.largestTx.type)} ·{" "}
+                        {formatTimestamp(advancedInsights.largestTx.createdAt)}{" "}
+                        · {advancedInsights.largestTx.reference}
+                      </small>
+                    </>
+                  ) : (
+                    <small className="text-muted">{text.analyticsNoData}</small>
+                  )}
                 </div>
               </div>
               <div className="mt-3 p-3 bg-light rounded">

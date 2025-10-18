@@ -2,6 +2,144 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import Spinner from "./Spinner";
+import { usePreferences } from "../context/PreferencesContext";
+
+const dictionary = {
+  vi: {
+    loading: "Đang tải hồ sơ...",
+    loadErrorMissing: "Không tìm thấy hồ sơ người dùng",
+    sessionExpired: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+    loadErrorGeneric: "Không thể lấy thông tin người dùng",
+    actionBackToLogin: "Quay lại đăng nhập",
+    noUser: "Không tìm thấy dữ liệu người dùng.",
+    hero: {
+      fallbackName: "Người dùng",
+      rolePrefix: "Vai trò:",
+      balancePrefix: "Số dư:",
+      balanceSuffix: "VND",
+    },
+    roles: {
+      admin: "Quản trị viên hệ thống",
+      user: "Khách hàng cá nhân",
+      staff: "Chuyên viên hỗ trợ",
+    },
+    sections: {
+      personal: "Thông tin cá nhân",
+      password: "Đổi mật khẩu",
+      mfa: "Bảo mật 2 lớp (MFA)",
+    },
+    labels: {
+      username: "Tên người dùng",
+      usernamePlaceholder: "Nhập tên hiển thị",
+      email: "Email",
+      emailPlaceholder: "name@example.com",
+      save: "Lưu thay đổi",
+      currentPassword: "Mật khẩu hiện tại",
+      currentPasswordPlaceholder: "Nhập mật khẩu hiện tại",
+      newPassword: "Mật khẩu mới",
+      newPasswordPlaceholder: "Ít nhất 8 ký tự",
+      changePassword: "Đổi mật khẩu",
+      mfaStatus: "Trạng thái:",
+      mfaOn: "Đang bật",
+      mfaOff: "Đang tắt",
+      toggleMfaOn: "Tắt MFA",
+      toggleMfaOff: "Bật nhanh (Email OTP)",
+      setupApp: "Thiết lập bằng ứng dụng",
+      mfaInstructions:
+        "Quét QR bằng Google Authenticator hoặc nhập secret bên dưới.",
+      secretLabel: "Secret:",
+      otpLabel: "Nhập mã 6 số",
+      otpPlaceholder: "123456",
+      verifyMfa: "Xác nhận kích hoạt",
+    },
+    flash: {
+      usernameRequired: "Tên người dùng không được bỏ trống.",
+      emailInvalid: "Email không hợp lệ.",
+      saveSuccess: "Đã lưu thay đổi.",
+      saveFail: "Cập nhật thất bại.",
+      passwordFields: "Vui lòng nhập đầy đủ mật khẩu hiện tại và mật khẩu mới.",
+      passwordTooShort: "Mật khẩu mới phải có ít nhất 8 ký tự.",
+      passwordSuccess: "Đã đổi mật khẩu.",
+      passwordFail: "Thay đổi mật khẩu thất bại.",
+      mfaToggleOn: "Đã bật MFA qua email OTP.",
+      mfaToggleOff: "Đã tắt MFA.",
+      mfaToggleFail: "Không thể thay đổi MFA.",
+      mfaSetupInit: "Đã tạo QR / secret. Vui lòng quét và xác thực.",
+      mfaSetupFail: "Không thể khởi tạo MFA.",
+      mfaTokenRequired: "Nhập mã 6 số từ ứng dụng trước khi xác nhận.",
+      mfaVerifySuccess: "Đã bật MFA.",
+      mfaVerifyFail: "Mã xác nhận không đúng.",
+    },
+  },
+  en: {
+    loading: "Loading profile...",
+    loadErrorMissing: "User profile not found",
+    sessionExpired: "Your session has expired. Please sign in again.",
+    loadErrorGeneric: "Unable to retrieve user information",
+    actionBackToLogin: "Back to login",
+    noUser: "User data is unavailable.",
+    hero: {
+      fallbackName: "User",
+      rolePrefix: "Role:",
+      balancePrefix: "Balance:",
+      balanceSuffix: "VND",
+    },
+    roles: {
+      admin: "Platform administrator",
+      user: "Retail customer",
+      staff: "Support specialist",
+    },
+    sections: {
+      personal: "Personal information",
+      password: "Change password",
+      mfa: "Multi-factor authentication (MFA)",
+    },
+    labels: {
+      username: "Username",
+      usernamePlaceholder: "Display name",
+      email: "Email",
+      emailPlaceholder: "name@example.com",
+      save: "Save changes",
+      currentPassword: "Current password",
+      currentPasswordPlaceholder: "Enter current password",
+      newPassword: "New password",
+      newPasswordPlaceholder: "At least 8 characters",
+      changePassword: "Update password",
+      mfaStatus: "Status:",
+      mfaOn: "Enabled",
+      mfaOff: "Disabled",
+      toggleMfaOn: "Disable MFA",
+      toggleMfaOff: "Enable via email OTP",
+      setupApp: "Set up with authenticator app",
+      mfaInstructions:
+        "Scan the QR with Google Authenticator or enter the secret below.",
+      secretLabel: "Secret:",
+      otpLabel: "Enter 6-digit code",
+      otpPlaceholder: "123456",
+      verifyMfa: "Confirm activation",
+    },
+    flash: {
+      usernameRequired: "Username cannot be empty.",
+      emailInvalid: "Email is invalid.",
+      saveSuccess: "Changes saved successfully.",
+      saveFail: "Update failed.",
+      passwordFields: "Please fill in both current and new passwords.",
+      passwordTooShort: "New password must contain at least 8 characters.",
+      passwordSuccess: "Password updated successfully.",
+      passwordFail: "Password change failed.",
+      mfaToggleOn: "Email OTP MFA enabled.",
+      mfaToggleOff: "MFA has been disabled.",
+      mfaToggleFail: "Unable to update MFA settings.",
+      mfaSetupInit:
+        "Secret generated. Scan the QR code and complete verification.",
+      mfaSetupFail: "Unable to initialise MFA.",
+      mfaTokenRequired:
+        "Enter the 6-digit code from your authenticator app first.",
+      mfaVerifySuccess: "MFA has been enabled.",
+      mfaVerifyFail: "Verification code is incorrect.",
+    },
+  },
+};
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,6 +163,9 @@ const UserProfile = () => {
   const [verifyingMfa, setVerifyingMfa] = useState(false);
 
   const navigate = useNavigate();
+  const { language } = usePreferences();
+  const text = dictionary[language] || dictionary.vi;
+  const locale = language === "vi" ? "vi-VN" : "en-US";
 
   useEffect(() => {
     let mounted = true;
@@ -34,7 +175,7 @@ const UserProfile = () => {
         if (!mounted) return;
         const u = res.data?.user;
         if (!u) {
-          setError("Không tìm thấy hồ sơ người dùng");
+          setError(text.loadErrorMissing);
           return;
         }
         setUser(u);
@@ -44,12 +185,10 @@ const UserProfile = () => {
       } catch (err) {
         const status = err.response?.status;
         if (status === 401 || status === 403) {
-          setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+          setError(text.sessionExpired);
           navigate("/login", { replace: true });
         } else {
-          setError(
-            err.response?.data?.error || "Không thể lấy thông tin người dùng"
-          );
+          setError(err.response?.data?.error || text.loadErrorGeneric);
         }
       } finally {
         if (mounted) setLoading(false);
@@ -58,7 +197,12 @@ const UserProfile = () => {
     return () => {
       mounted = false;
     };
-  }, [navigate]);
+  }, [
+    navigate,
+    text.loadErrorMissing,
+    text.sessionExpired,
+    text.loadErrorGeneric,
+  ]);
 
   useEffect(() => {
     if (!flash) return;
@@ -76,11 +220,11 @@ const UserProfile = () => {
 
   const saveProfile = async () => {
     if (!username.trim()) {
-      showFlash("Tên người dùng không được bỏ trống.", "danger");
+      showFlash(text.flash.usernameRequired, "danger");
       return;
     }
     if (!emailPattern.test(email.trim())) {
-      showFlash("Email không hợp lệ.", "danger");
+      showFlash(text.flash.emailInvalid, "danger");
       return;
     }
     setSavingProfile(true);
@@ -94,9 +238,9 @@ const UserProfile = () => {
         username: username.trim(),
         email: email.trim(),
       }));
-      showFlash(res.data?.message || "Đã lưu thay đổi.", "success");
+      showFlash(res.data?.message || text.flash.saveSuccess, "success");
     } catch (err) {
-      showFlash(err.response?.data?.error || "Cập nhật thất bại.", "danger");
+      showFlash(err.response?.data?.error || text.flash.saveFail, "danger");
     } finally {
       setSavingProfile(false);
     }
@@ -104,14 +248,11 @@ const UserProfile = () => {
 
   const changePassword = async () => {
     if (!pwCurrent || !pwNew) {
-      showFlash(
-        "Vui lòng nhập đầy đủ mật khẩu hiện tại và mật khẩu mới.",
-        "danger"
-      );
+      showFlash(text.flash.passwordFields, "danger");
       return;
     }
     if (pwNew.length < 8) {
-      showFlash("Mật khẩu mới phải có ít nhất 8 ký tự.", "danger");
+      showFlash(text.flash.passwordTooShort, "danger");
       return;
     }
     setChangingPw(true);
@@ -120,14 +261,11 @@ const UserProfile = () => {
         currentPassword: pwCurrent,
         newPassword: pwNew,
       });
-      showFlash(res.data?.message || "Đã đổi mật khẩu.", "success");
+      showFlash(res.data?.message || text.flash.passwordSuccess, "success");
       setPwCurrent("");
       setPwNew("");
     } catch (err) {
-      showFlash(
-        err.response?.data?.error || "Thay đổi mật khẩu thất bại.",
-        "danger"
-      );
+      showFlash(err.response?.data?.error || text.flash.passwordFail, "danger");
     } finally {
       setChangingPw(false);
     }
@@ -142,12 +280,12 @@ const UserProfile = () => {
       setMfaSecret("");
       setMfaToken("");
       showFlash(
-        res.data?.mfaEnabled ? "Đã bật MFA qua email OTP." : "Đã tắt MFA.",
+        res.data?.mfaEnabled ? text.flash.mfaToggleOn : text.flash.mfaToggleOff,
         "success"
       );
     } catch (err) {
       showFlash(
-        err.response?.data?.error || "Không thể thay đổi MFA.",
+        err.response?.data?.error || text.flash.mfaToggleFail,
         "danger"
       );
     } finally {
@@ -161,12 +299,9 @@ const UserProfile = () => {
       const res = await api.post("/api/auth/mfa/setup", {});
       setMfaQR(res.data?.qr || null);
       setMfaSecret(res.data?.secret || "");
-      showFlash("Đã tạo QR / secret. Vui lòng quét và xác thực.", "info");
+      showFlash(text.flash.mfaSetupInit, "info");
     } catch (err) {
-      showFlash(
-        err.response?.data?.error || "Không thể khởi tạo MFA.",
-        "danger"
-      );
+      showFlash(err.response?.data?.error || text.flash.mfaSetupFail, "danger");
     } finally {
       setSetupLoading(false);
     }
@@ -174,7 +309,7 @@ const UserProfile = () => {
 
   const verifyMfa = async () => {
     if (mfaToken.trim().length < 6) {
-      showFlash("Nhập mã 6 số từ ứng dụng trước khi xác nhận.", "danger");
+      showFlash(text.flash.mfaTokenRequired, "danger");
       return;
     }
     setVerifyingMfa(true);
@@ -182,14 +317,14 @@ const UserProfile = () => {
       const res = await api.post("/api/auth/mfa/verify", {
         token: mfaToken.trim(),
       });
-      showFlash(res.data?.message || "Đã bật MFA.", "success");
+      showFlash(res.data?.message || text.flash.mfaVerifySuccess, "success");
       setMfaEnabled(true);
       setMfaQR(null);
       setMfaSecret("");
       setMfaToken("");
     } catch (err) {
       showFlash(
-        err.response?.data?.error || "Mã xác nhận không đúng.",
+        err.response?.data?.error || text.flash.mfaVerifyFail,
         "danger"
       );
     } finally {
@@ -201,7 +336,7 @@ const UserProfile = () => {
     return (
       <div className="card p-4 text-center profile-loading">
         <Spinner size={28} />
-        <span>Đang tải hồ sơ...</span>
+        <span>{text.loading}</span>
       </div>
     );
   }
@@ -211,7 +346,7 @@ const UserProfile = () => {
       <div className="card p-4 profile-error text-center">
         <div className="alert alert-danger mb-3">{error}</div>
         <button className="btn btn-primary" onClick={() => navigate("/login")}>
-          Quay lại đăng nhập
+          {text.actionBackToLogin}
         </button>
       </div>
     );
@@ -220,17 +355,18 @@ const UserProfile = () => {
   if (!user) {
     return (
       <div className="card p-4 text-center">
-        <div className="alert alert-warning mb-0">
-          Không tìm thấy dữ liệu người dùng.
-        </div>
+        <div className="alert alert-warning mb-0">{text.noUser}</div>
       </div>
     );
   }
 
   const balanceDisplay =
     typeof user.balance === "number"
-      ? user.balance.toLocaleString("vi-VN")
-      : Number(user.balance || 0).toLocaleString("vi-VN");
+      ? user.balance.toLocaleString(locale)
+      : Number(user.balance || 0).toLocaleString(locale);
+
+  const roleLabel =
+    text.roles[user.role] || text.roles.user || user.role || "user";
 
   return (
     <div className="profile-page">
@@ -238,12 +374,16 @@ const UserProfile = () => {
         <div className="profile-avatar">{initials}</div>
         <div>
           <h2 className="profile-title mb-1">
-            {user.username || "Người dùng"}
+            {user.username || text.hero.fallbackName}
           </h2>
           <div className="profile-meta">{user.email}</div>
           <div className="profile-meta mt-2">
-            Vai trò: <strong>{user.role || "user"}</strong> · Số dư:
-            <strong> {balanceDisplay} VND</strong>
+            {text.hero.rolePrefix} <strong>{roleLabel}</strong> ·{" "}
+            {text.hero.balancePrefix}
+            <strong>
+              {" "}
+              {balanceDisplay} {text.hero.balanceSuffix}
+            </strong>
           </div>
         </div>
       </div>
@@ -257,56 +397,58 @@ const UserProfile = () => {
       <div className="row g-4 profile-grid">
         <div className="col-lg-6">
           <div className="card h-100 p-4">
-            <h5 className="section-title">Thông tin cá nhân</h5>
-            <label className="form-label">Tên người dùng</label>
+            <h5 className="section-title">{text.sections.personal}</h5>
+            <label className="form-label">{text.labels.username}</label>
             <input
               className="form-control mb-3"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Nhập tên hiển thị"
+              placeholder={text.labels.usernamePlaceholder}
             />
-            <label className="form-label">Email</label>
+            <label className="form-label">{text.labels.email}</label>
             <input
               className="form-control mb-4"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@example.com"
+              placeholder={text.labels.emailPlaceholder}
             />
             <button
               className="btn btn-primary"
               onClick={saveProfile}
               disabled={savingProfile}
             >
-              {savingProfile && <Spinner size={18} />}Lưu thay đổi
+              {savingProfile && <Spinner size={18} />}
+              {text.labels.save}
             </button>
           </div>
         </div>
 
         <div className="col-lg-6">
           <div className="card h-100 p-4">
-            <h5 className="section-title">Đổi mật khẩu</h5>
-            <label className="form-label">Mật khẩu hiện tại</label>
+            <h5 className="section-title">{text.sections.password}</h5>
+            <label className="form-label">{text.labels.currentPassword}</label>
             <input
               type="password"
               className="form-control mb-3"
               value={pwCurrent}
               onChange={(e) => setPwCurrent(e.target.value)}
-              placeholder="Nhập mật khẩu hiện tại"
+              placeholder={text.labels.currentPasswordPlaceholder}
             />
-            <label className="form-label">Mật khẩu mới</label>
+            <label className="form-label">{text.labels.newPassword}</label>
             <input
               type="password"
               className="form-control mb-4"
               value={pwNew}
               onChange={(e) => setPwNew(e.target.value)}
-              placeholder="Ít nhất 8 ký tự"
+              placeholder={text.labels.newPasswordPlaceholder}
             />
             <button
               className="btn btn-warning text-white"
               onClick={changePassword}
               disabled={changingPw}
             >
-              {changingPw && <Spinner size={18} />}Đổi mật khẩu
+              {changingPw && <Spinner size={18} />}
+              {text.labels.changePassword}
             </button>
           </div>
         </div>
@@ -315,13 +457,17 @@ const UserProfile = () => {
           <div className="card p-4">
             <div className="d-flex justify-content-between align-items-start flex-wrap gap-3">
               <div>
-                <h5 className="section-title mb-1">Bảo mật 2 lớp (MFA)</h5>
+                <h5 className="section-title mb-1">{text.sections.mfa}</h5>
                 <div className="profile-meta">
-                  Trạng thái:&nbsp;
+                  {text.labels.mfaStatus}&nbsp;
                   {mfaEnabled ? (
-                    <span className="badge bg-success">Đang bật</span>
+                    <span className="badge bg-success">
+                      {text.labels.mfaOn}
+                    </span>
                   ) : (
-                    <span className="badge bg-secondary">Đang tắt</span>
+                    <span className="badge bg-secondary">
+                      {text.labels.mfaOff}
+                    </span>
                   )}
                 </div>
               </div>
@@ -332,7 +478,9 @@ const UserProfile = () => {
                   disabled={togglingMfa}
                 >
                   {togglingMfa && <Spinner size={18} />}
-                  {mfaEnabled ? "Tắt MFA" : "Bật nhanh (Email OTP)"}
+                  {mfaEnabled
+                    ? text.labels.toggleMfaOn
+                    : text.labels.toggleMfaOff}
                 </button>
                 <button
                   className="btn btn-outline-primary"
@@ -340,7 +488,7 @@ const UserProfile = () => {
                   disabled={setupLoading}
                 >
                   {setupLoading && <Spinner size={18} />}
-                  Thiết lập bằng ứng dụng
+                  {text.labels.setupApp}
                 </button>
               </div>
             </div>
@@ -348,22 +496,22 @@ const UserProfile = () => {
             {mfaQR && (
               <div className="mfa-setup mt-4">
                 <div className="mfa-instructions">
-                  Quét QR bằng Google Authenticator hoặc nhập secret bên dưới.
+                  {text.labels.mfaInstructions}
                 </div>
                 <div className="mfa-qr-wrapper">
                   <img src={mfaQR} alt="MFA QR" />
                   <div className="mfa-secret">
-                    <span>Secret:</span>
+                    <span>{text.labels.secretLabel}</span>
                     <code>{mfaSecret}</code>
                   </div>
                 </div>
                 <div className="mt-3">
-                  <label className="form-label">Nhập mã 6 số</label>
+                  <label className="form-label">{text.labels.otpLabel}</label>
                   <input
                     className="form-control"
                     value={mfaToken}
                     onChange={(e) => setMfaToken(e.target.value)}
-                    placeholder="123456"
+                    placeholder={text.labels.otpPlaceholder}
                   />
                   <button
                     className="btn btn-success mt-3"
@@ -371,7 +519,7 @@ const UserProfile = () => {
                     disabled={verifyingMfa}
                   >
                     {verifyingMfa && <Spinner size={18} />}
-                    Xác nhận kích hoạt
+                    {text.labels.verifyMfa}
                   </button>
                 </div>
               </div>

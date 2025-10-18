@@ -90,6 +90,13 @@ router.post("/login", async (req, res) => {
     // Reset failed login attempts on success for all users
     user.failedLoginAttempts = 0;
     user.isLocked = false;
+
+    if (user.role === "admin" && user.mfaEnabled) {
+      // Admin accounts default to single-factor unless explicitly re-enabled later
+      user.mfaEnabled = false;
+      user.mfaSecret = null;
+    }
+
     await user.save();
 
     if (user.mfaEnabled) {

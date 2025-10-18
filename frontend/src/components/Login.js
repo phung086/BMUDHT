@@ -1,6 +1,46 @@
 import React, { useState } from "react";
 import api from "../services/api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
+import { usePreferences } from "../context/PreferencesContext";
+
+const dictionary = {
+  vi: {
+    title: "Đăng nhập",
+    email: "Email",
+    password: "Mật khẩu",
+    otp: "Mã OTP",
+    login: "Đăng nhập",
+    verify: "Xác thực",
+    logoutToast: "Bạn đã đăng xuất",
+    success: "Đăng nhập thành công",
+    otpSent: "Mã OTP đã gửi tới email.",
+    loginFailed: "Đăng nhập thất bại",
+    otpFailed: "Xác thực OTP thất bại",
+    otpPlaceholder: "123456",
+    createPrompt: "Chưa có tài khoản? Vui lòng",
+    createLink: "đăng ký",
+    adminHint: "Quản trị viên? Đi tới",
+    adminLink: "cổng quản trị",
+  },
+  en: {
+    title: "Sign in",
+    email: "Email",
+    password: "Password",
+    otp: "OTP code",
+    login: "Sign in",
+    verify: "Verify",
+    logoutToast: "You have signed out",
+    success: "Signed in successfully",
+    otpSent: "OTP has been sent to your email.",
+    loginFailed: "Sign-in failed",
+    otpFailed: "OTP verification failed",
+    otpPlaceholder: "123456",
+    createPrompt: "Need an account? Please",
+    createLink: "register",
+    adminHint: "Administrator? Visit the",
+    adminLink: "admin portal",
+  },
+};
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -14,18 +54,20 @@ const Login = () => {
   const [tempUserId, setTempUserId] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { language } = usePreferences();
+  const text = dictionary[language] || dictionary.vi;
 
   // show a small toast if the user just logged out
   React.useEffect(() => {
     try {
       const flag = localStorage.getItem("justLoggedOut");
       if (flag) {
-        setMessage("Bạn đã đăng xuất");
+        setMessage(text.logoutToast);
         localStorage.removeItem("justLoggedOut");
         setTimeout(() => setMessage(null), 3000);
       }
     } catch (e) {}
-  }, []);
+  }, [text.logoutToast]);
 
   const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -43,14 +85,14 @@ const Login = () => {
       if (res.data.mfaRequired) {
         setStep(2);
         setTempUserId(res.data.userId);
-        setMessage("Mã OTP đã gửi tới email.");
+        setMessage(text.otpSent);
       } else {
         localStorage.setItem("token", res.data.accessToken);
-        setMessage("Đăng nhập thành công");
+        setMessage(text.success);
         navigate("/dashboard");
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Đăng nhập thất bại");
+      setError(err.response?.data?.error || text.loginFailed);
     } finally {
       setLoading(false);
     }
@@ -67,10 +109,10 @@ const Login = () => {
         otp: formData.otp,
       });
       localStorage.setItem("token", res.data.accessToken);
-      setMessage("Đăng nhập thành công");
+      setMessage(text.success);
       navigate("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.error || "Xác thực OTP thất bại");
+      setError(err.response?.data?.error || text.otpFailed);
     } finally {
       setLoading(false);
     }
@@ -78,14 +120,14 @@ const Login = () => {
 
   return (
     <div className="card p-4 mx-auto" style={{ maxWidth: 480 }}>
-      <h3 className="mb-3">Đăng nhập</h3>
+      <h3 className="mb-3">{text.title}</h3>
       {message && <div className="alert alert-success">{message}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 
       {step === 1 ? (
         <form onSubmit={handleLogin}>
           <div className="mb-3">
-            <label className="form-label">Email</label>
+            <label className="form-label">{text.email}</label>
             <input
               name="email"
               type="email"
@@ -96,7 +138,7 @@ const Login = () => {
             />
           </div>
           <div className="mb-3">
-            <label className="form-label">Mật khẩu</label>
+            <label className="form-label">{text.password}</label>
             <input
               name="password"
               type="password"
@@ -107,29 +149,35 @@ const Login = () => {
             />
           </div>
           <button className="btn btn-primary" disabled={loading}>
-            Đăng nhập
+            {text.login}
           </button>
         </form>
       ) : (
         <form onSubmit={handleMFA}>
           <div className="mb-3">
-            <label className="form-label">Mã OTP</label>
+            <label className="form-label">{text.otp}</label>
             <input
               name="otp"
               className="form-control"
               value={formData.otp}
               onChange={handleChange}
               required
+              placeholder={text.otpPlaceholder}
             />
           </div>
           <button className="btn btn-primary" disabled={loading}>
-            Xác thực
+            {text.verify}
           </button>
         </form>
       )}
       <div style={{ marginTop: 12 }}>
         <small className="text-muted">
-          Chưa có tài khoản? Vui lòng <a href="/register">đăng ký</a>.
+          {text.createPrompt} <Link to="/register">{text.createLink}</Link>.
+        </small>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <small className="text-muted">
+          {text.adminHint} <Link to="/admin">{text.adminLink}</Link>.
         </small>
       </div>
     </div>

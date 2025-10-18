@@ -1,6 +1,6 @@
 import React from "react";
 
-const LoaderOverlay = ({ show, message = "Đang xử lý..." }) => {
+const LoaderOverlay = ({ show = true, message = "Đang xử lý..." }) => {
   if (!show) return null;
   return (
     <div className="loader-overlay">

@@ -53,8 +53,10 @@ const logAction = async (req, res, next) => {
       try {
         const userId = req.user?.id;
         const action = req.originalUrl + " " + req.method;
+        const auditPayload =
+          req.sanitizedBody !== undefined ? req.sanitizedBody : req.body;
         const details = `Status: ${res.statusCode}, Body: ${JSON.stringify(
-          req.body
+          auditPayload
         )}`;
         const ipAddress = req.ip || req.connection.remoteAddress;
         const userAgent = req.get("User-Agent");
@@ -66,6 +68,9 @@ const logAction = async (req, res, next) => {
           ipAddress,
           userAgent,
         });
+        if (req.sanitizedBody !== undefined) {
+          delete req.sanitizedBody;
+        }
       } catch (error) {
         console.error("Logging error:", error);
       }

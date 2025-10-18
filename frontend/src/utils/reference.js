@@ -3,30 +3,43 @@ const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const hashSeed = (seed) => {
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+    hash = (hash * 33) ^ seed.charCodeAt(i);
   }
-  return hash;
+  return hash >>> 0;
+};
+
+const mixHash = (current, salt) => {
+  return hashSeed(`${current}-${salt}-${current.length}`);
+};
+
+const buildEntropySeed = (tx) => {
+  const created = tx.createdAt ? new Date(tx.createdAt).getTime() : 0;
+  return [
+    tx.id || "id",
+    created || Date.now(),
+    tx.amount || 0,
+    tx.type || "tx",
+    tx.status || "st",
+    tx.description || "",
+  ].join("|");
 };
 
 export const getReferenceCode = (tx) => {
   if (!tx) return "REF-UNKNOWN";
   if (tx.referenceCode) return tx.referenceCode;
-  const baseSeed = `${tx.id || "id"}-${tx.createdAt || "time"}-${
-    tx.amount || 0
-  }-${tx.type || "tx"}-${tx.status || "st"}`;
-  let hash = hashSeed(baseSeed);
+  let seed = buildEntropySeed(tx);
+  let hash = hashSeed(seed);
   let code = "";
-  while (code.length < 8) {
+  while (code.length < 12) {
+    hash = mixHash(seed, `${hash}-${code.length}`);
     const index = hash % alphabet.length;
     code += alphabet[index];
-    hash = hash / alphabet.length;
-    if (hash < 1) {
-      hash = hashSeed(`${baseSeed}-${code}-${hash}`);
-    }
+    seed = `${seed}-${index}-${code.length}`;
   }
+  const segments = [code.slice(0, 4), code.slice(4, 8), code.slice(8, 12)];
   const prefix =
     tx.type === "deposit" ? "IN" : tx.type === "transfer" ? "OUT" : "TX";
-  return `${prefix}-${code.slice(0, 4)}-${code.slice(4, 8)}`;
+  return `${prefix}-${segments.join("-")}`;
 };
 
 export default getReferenceCode;

@@ -62,7 +62,9 @@ app.use((req, res, next) => {
 // Rate limiting (after cookie parsing so downstream middleware that relies on cookies)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: process.env.NODE_ENV === "production" ? 100 : 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: "Too many requests from this IP, please try again later.",
 });
 

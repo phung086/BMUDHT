@@ -1,26 +1,80 @@
-import React, { useContext, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import LogoutConfirmModal from "./LogoutConfirmModal";
 import NotificationContext from "../context/NotificationContext";
+import { usePreferences } from "../context/PreferencesContext";
+
+const copy = {
+  vi: {
+    homeAria: "Trang chủ",
+    notificationsAria: "Thông báo",
+    profileAria: "Hồ sơ cá nhân",
+    authLogin: "Đăng nhập",
+    authRegister: "Tạo tài khoản",
+    authAdmin: "Quản trị",
+    logout: "Đăng xuất",
+    accountFallback: "Tài khoản",
+    adminAria: "Bảng quản trị",
+    themeLabel: "Chủ đề",
+    themeUseLight: "Dùng chế độ sáng",
+    themeUseDark: "Dùng chế độ tối",
+    languageLabel: "Ngôn ngữ",
+    languageToggle: "Switch to English",
+    brandSubtitle: "Digital Banking Suite",
+  },
+  en: {
+    homeAria: "Home",
+    notificationsAria: "Notifications",
+    profileAria: "Profile",
+    authLogin: "Login",
+    authRegister: "Create Account",
+    authAdmin: "Admin Portal",
+    logout: "Logout",
+    accountFallback: "Account",
+    adminAria: "Admin Dashboard",
+    themeLabel: "Theme",
+    themeUseLight: "Use Light Mode",
+    themeUseDark: "Use Dark Mode",
+    languageLabel: "Language",
+    languageToggle: "Chuyển sang Tiếng Việt",
+    brandSubtitle: "Digital Banking Suite",
+  },
+};
 
 const NavBar = () => {
   const [showLogout, setShowLogout] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const token = localStorage.getItem("token");
   const { unreadCount } = useContext(NotificationContext);
-  // simple user display from token payload if available
-  const getInitials = () => {
+  const { theme, toggleTheme, language, toggleLanguage } = usePreferences();
+  const text = copy[language] || copy.vi;
+  const languageToggleLabel =
+    language === "vi" ? copy.vi.languageToggle : copy.en.languageToggle;
+  const settingsRef = useRef(null);
+  const tokenPayload = useMemo(() => {
+    if (!token) return null;
     try {
-      const raw = localStorage.getItem("token");
-      if (!raw) return null;
-      const payload = JSON.parse(atob(raw.split(".")[1]));
-      const name = payload?.name || payload?.username || payload?.role || "";
-      return (name[0] || "").toUpperCase();
+      const [, base64] = token.split(".");
+      return JSON.parse(atob(base64));
     } catch (e) {
       return null;
     }
-  };
-  const initials = getInitials();
+  }, [token]);
+
+  const displayName = useMemo(() => {
+    if (!tokenPayload) return "";
+    return (
+      tokenPayload.name ||
+      tokenPayload.fullName ||
+      tokenPayload.username ||
+      tokenPayload.email?.split("@")[0] ||
+      ""
+    );
+  }, [tokenPayload]);
+
+  const isAdmin = tokenPayload?.role === "admin";
 
   const handleLogout = () => {
     try {
@@ -35,103 +89,171 @@ const NavBar = () => {
     try {
       localStorage.setItem("justLoggedOut", "1");
     } catch (e) {}
-    navigate("/login");
+    setShowLogout(false);
+    navigate("/login", { replace: true });
   };
 
   const openLogout = () => setShowLogout(true);
   const cancelLogout = () => setShowLogout(false);
 
+  const toggleSettings = () => setSettingsOpen((current) => !current);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const handleClickOutside = (event) => {
+      if (!settingsRef.current) return;
+      if (!settingsRef.current.contains(event.target)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [settingsOpen]);
+
+  const isActive = (path) => location.pathname.startsWith(path);
+
   return (
-    <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
-      <div className="container">
-        <Link className="navbar-brand" to="/">
-          Fintech Demo
-        </Link>
-        <button
-          className="navbar-toggler"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#mainNav"
+    <nav className="app-navbar">
+      <div className="app-navbar__inner">
+        <Link
+          className="app-navbar__brand"
+          to={
+            !token
+              ? "/"
+              : isAdmin && location.pathname.startsWith("/admin")
+              ? "/admin"
+              : "/dashboard"
+          }
         >
-          <span className="navbar-toggler-icon"></span>
-        </button>
-        <div className="collapse navbar-collapse" id="mainNav">
-          <ul className="navbar-nav me-auto">
-            <li className="nav-item">
-              <Link className="nav-link" to="/dashboard">
-                Dashboard
+          <span className="app-navbar__logo" aria-hidden>
+            <i className="bi bi-bank2"></i>
+          </span>
+          <span className="app-navbar__brand-text">
+            Fintech One
+            <small>{text.brandSubtitle}</small>
+          </span>
+        </Link>
+
+        <div className="app-navbar__actions">
+          {!token ? (
+            <div className="app-navbar__auth">
+              <Link className="app-navbar__link" to="/login">
+                {text.authLogin}
               </Link>
-            </li>
-            {token && (
-              <li className="nav-item">
-                <Link className="nav-link" to="/profile">
-                  Profile
+              <Link className="app-navbar__link" to="/admin">
+                {text.authAdmin}
+              </Link>
+              <Link className="app-navbar__cta" to="/register">
+                {text.authRegister}
+              </Link>
+            </div>
+          ) : (
+            <>
+              <Link
+                to="/dashboard"
+                className={`app-navbar__icon ${
+                  isActive("/dashboard") ? "is-active" : ""
+                }`}
+                aria-label={text.homeAria}
+              >
+                <i className="bi bi-house-door"></i>
+              </Link>
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  className={`app-navbar__icon ${
+                    isActive("/admin") ? "is-active" : ""
+                  }`}
+                  aria-label={text.adminAria}
+                >
+                  <i className="bi bi-shield-lock"></i>
                 </Link>
-              </li>
-            )}
-            <li className="nav-item">
-              <Link className="nav-link" to="/admin">
-                Admin
+              )}
+              <Link
+                to="/notifications"
+                className={`app-navbar__icon ${
+                  isActive("/notifications") ? "is-active" : ""
+                }`}
+                aria-label={text.notificationsAria}
+              >
+                <i className="bi bi-bell"></i>
+                {unreadCount > 0 && (
+                  <span className="app-navbar__badge">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
               </Link>
-            </li>
-          </ul>
-          <ul className="navbar-nav">
-            {!token ? (
-              <>
-                <li className="nav-item">
-                  <Link className="nav-link" to="/login">
-                    Login
-                  </Link>
-                </li>
-                <li className="nav-item">
-                  <Link className="nav-link" to="/register">
-                    Register
-                  </Link>
-                </li>
-              </>
-            ) : (
-              <>
-                <li className="nav-item d-flex align-items-center me-3">
-                  <Link
-                    className="nav-link position-relative"
-                    to="/notifications"
-                    title="Thông báo"
-                  >
-                    <i className="bi bi-bell" aria-hidden></i>
-                    {unreadCount > 0 && (
-                      <span className="notification-badge">
-                        {unreadCount > 9 ? "9+" : unreadCount}
+              <div className="app-navbar__settings" ref={settingsRef}>
+                <button
+                  type="button"
+                  className={`app-navbar__icon ${
+                    settingsOpen ? "is-active" : ""
+                  }`}
+                  aria-haspopup="true"
+                  aria-expanded={settingsOpen}
+                  onClick={toggleSettings}
+                >
+                  <i className="bi bi-gear"></i>
+                </button>
+                {settingsOpen && (
+                  <div className="app-navbar__menu" role="menu">
+                    <div className="app-navbar__menu-section" role="none">
+                      <span className="app-navbar__menu-label">
+                        {text.themeLabel}
                       </span>
-                    )}
-                  </Link>
-                </li>
-                <li className="nav-item d-flex align-items-center me-2">
-                  <div
-                    className="bg-light text-primary rounded-circle"
-                    style={{
-                      width: 32,
-                      height: 32,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {initials || "U"}
+                      <button
+                        type="button"
+                        className="app-navbar__menu-item"
+                        onClick={toggleTheme}
+                        role="menuitem"
+                      >
+                        <i className="bi bi-circle-half me-2" aria-hidden></i>
+                        {theme === "dark"
+                          ? text.themeUseLight
+                          : text.themeUseDark}
+                      </button>
+                    </div>
+                    <div className="app-navbar__menu-section" role="none">
+                      <span className="app-navbar__menu-label">
+                        {text.languageLabel}
+                      </span>
+                      <button
+                        type="button"
+                        className="app-navbar__menu-item"
+                        onClick={toggleLanguage}
+                        role="menuitem"
+                      >
+                        <i className="bi bi-translate me-2" aria-hidden></i>
+                        {languageToggleLabel}
+                      </button>
+                    </div>
                   </div>
-                </li>
-                <li className="nav-item">
-                  <button
-                    className="btn btn-outline-light d-flex align-items-center"
-                    onClick={openLogout}
-                  >
-                    <i className="bi bi-box-arrow-right me-2" aria-hidden></i>
-                    Logout
-                  </button>
-                </li>
-              </>
-            )}
-          </ul>
+                )}
+              </div>
+              <Link
+                to="/profile"
+                className={`app-navbar__profile ${
+                  isActive("/profile") ? "is-active" : ""
+                }`}
+                aria-label={text.profileAria}
+              >
+                <span className="app-navbar__avatar">
+                  <i className="bi bi-person-fill"></i>
+                </span>
+                <span className="app-navbar__profile-name">
+                  {displayName || text.accountFallback}
+                </span>
+              </Link>
+              <button
+                className="app-navbar__logout"
+                type="button"
+                onClick={openLogout}
+              >
+                <i className="bi bi-box-arrow-right" aria-hidden></i>
+                <span>{text.logout}</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
       <LogoutConfirmModal
