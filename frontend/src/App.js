@@ -11,11 +11,13 @@ import UserProfile from "./components/UserProfile";
 import NotificationsPage from "./components/NotificationsPage";
 import { NotificationProvider } from "./context/NotificationContext";
 import { PreferencesProvider } from "./context/PreferencesContext";
+import SessionWatcher from "./components/SessionWatcher";
 
 const App = () => {
   return (
     <BrowserRouter>
       <PreferencesProvider>
+        <SessionWatcher />
         <NotificationProvider>
           <div className="app-shell">
             <NavBar />

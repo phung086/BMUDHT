@@ -3,6 +3,14 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import LogoutConfirmModal from "./LogoutConfirmModal";
 import NotificationContext from "../context/NotificationContext";
 import { usePreferences } from "../context/PreferencesContext";
+import {
+  AUTH_EVENT,
+  broadcastAuthChange,
+  clearToken,
+  decodeTokenPayload,
+  readToken,
+} from "../utils/authSignal";
+import { clearSessionExpiredFlag, serverLogout } from "../utils/sessionManager";
 
 const copy = {
   vi: {
@@ -44,24 +52,16 @@ const copy = {
 const NavBar = () => {
   const [showLogout, setShowLogout] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [token, setToken] = useState(() => readToken());
   const navigate = useNavigate();
   const location = useLocation();
-  const token = localStorage.getItem("token");
   const { unreadCount } = useContext(NotificationContext);
   const { theme, toggleTheme, language, toggleLanguage } = usePreferences();
   const text = copy[language] || copy.vi;
   const languageToggleLabel =
     language === "vi" ? copy.vi.languageToggle : copy.en.languageToggle;
   const settingsRef = useRef(null);
-  const tokenPayload = useMemo(() => {
-    if (!token) return null;
-    try {
-      const [, base64] = token.split(".");
-      return JSON.parse(atob(base64));
-    } catch (e) {
-      return null;
-    }
-  }, [token]);
+  const tokenPayload = useMemo(() => decodeTokenPayload(token), [token]);
 
   const displayName = useMemo(() => {
     if (!tokenPayload) return "";
@@ -76,19 +76,33 @@ const NavBar = () => {
 
   const isAdmin = tokenPayload?.role === "admin";
 
-  const handleLogout = () => {
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+    const syncToken = () => setToken(readToken());
+    syncToken();
+    window.addEventListener("storage", syncToken);
+    window.addEventListener(AUTH_EVENT, syncToken);
+    return () => {
+      window.removeEventListener("storage", syncToken);
+      window.removeEventListener(AUTH_EVENT, syncToken);
+    };
+  }, []);
+
+  const handleLogout = async () => {
     try {
-      // best-effort call to server to clear refresh cookie
-      fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      }).catch(() => {});
-    } catch (e) {}
-    localStorage.removeItem("token");
-    // set a small flag so the login page can show a toast confirming logout
+      await serverLogout();
+    } catch (error) {
+      /* ignore logout failures */
+    }
+    clearToken();
+    clearSessionExpiredFlag();
     try {
       localStorage.setItem("justLoggedOut", "1");
     } catch (e) {}
+    setToken(null);
+    broadcastAuthChange();
     setShowLogout(false);
     navigate("/login", { replace: true });
   };

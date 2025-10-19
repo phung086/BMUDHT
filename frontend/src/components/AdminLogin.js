@@ -27,7 +27,7 @@ const AdminLogin = ({ onLoginSuccess }) => {
         setMfaRequired(true);
         setUserId(res.data.userId);
       } else {
-        onLoginSuccess(res.data.accessToken, res.data.refreshToken);
+        onLoginSuccess(res.data.accessToken);
       }
     } catch (err) {
       setError(err.response?.data?.error || "Đăng nhập không thành công");
@@ -41,8 +41,11 @@ const AdminLogin = ({ onLoginSuccess }) => {
     setError("");
     setLoading(true);
     try {
-      const res = await api.post("/api/auth/login/mfa", { userId, otp: form.otp });
-      onLoginSuccess(res.data.accessToken, res.data.refreshToken);
+      const res = await api.post("/api/auth/login/mfa", {
+        userId,
+        otp: form.otp,
+      });
+      onLoginSuccess(res.data.accessToken);
     } catch (err) {
       setError(err.response?.data?.error || "Mã OTP không hợp lệ");
     } finally {
@@ -62,7 +65,8 @@ const AdminLogin = ({ onLoginSuccess }) => {
       <div className="admin-login-illustration gradient-card">
         <h1>Trung tâm quản trị</h1>
         <p>
-          Giám sát giao dịch, quản lý người dùng và cấu hình bảo mật trên cùng một giao diện.
+          Giám sát giao dịch, quản lý người dùng và cấu hình bảo mật trên cùng
+          một giao diện.
         </p>
         <ul className="admin-login-highlights">
           <li>
@@ -81,21 +85,30 @@ const AdminLogin = ({ onLoginSuccess }) => {
       </div>
       <div className="admin-login-card card shadow-lg">
         <div className="card-body">
-          <span className="badge bg-primary-subtle text-primary mb-3">Quản trị hệ thống</span>
+          <span className="badge bg-primary-subtle text-primary mb-3">
+            Quản trị hệ thống
+          </span>
           <h2 className="card-title mb-2">Đăng nhập Admin</h2>
           <p className="text-muted mb-4">
-            Vui lòng sử dụng thông tin nội bộ. Tài khoản quản trị được ghi log mọi thao tác quan trọng.
+            Vui lòng sử dụng thông tin nội bộ. Tài khoản quản trị được ghi log
+            mọi thao tác quan trọng.
           </p>
 
           {error && (
             <div className="alert alert-danger" role="alert">
-              <i className="bi bi-exclamation-triangle-fill me-2" aria-hidden></i>
+              <i
+                className="bi bi-exclamation-triangle-fill me-2"
+                aria-hidden
+              ></i>
               {error}
             </div>
           )}
 
           {!mfaRequired ? (
-            <form className="admin-login-form" onSubmit={handleCredentialsSubmit}>
+            <form
+              className="admin-login-form"
+              onSubmit={handleCredentialsSubmit}
+            >
               <div className="form-floating mb-3">
                 <input
                   id="adminEmail"
@@ -122,15 +135,26 @@ const AdminLogin = ({ onLoginSuccess }) => {
                 />
                 <label htmlFor="adminPassword">Mật khẩu</label>
               </div>
-              <button type="submit" className="btn btn-primary w-100" disabled={loading}>
+              <button
+                type="submit"
+                className="btn btn-primary w-100"
+                disabled={loading}
+              >
                 {loading ? (
                   <>
-                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden></span>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden
+                    ></span>
                     Đang kiểm tra thông tin
                   </>
                 ) : (
                   <>
-                    <i className="bi bi-box-arrow-in-right me-2" aria-hidden></i>
+                    <i
+                      className="bi bi-box-arrow-in-right me-2"
+                      aria-hidden
+                    ></i>
                     Đăng nhập
                   </>
                 )}
@@ -157,10 +181,18 @@ const AdminLogin = ({ onLoginSuccess }) => {
                 <label htmlFor="adminOtp">Mã OTP (6 chữ số)</label>
               </div>
               <div className="d-flex align-items-center gap-2 mb-3">
-                <button type="submit" className="btn btn-primary flex-grow-1" disabled={loading}>
+                <button
+                  type="submit"
+                  className="btn btn-primary flex-grow-1"
+                  disabled={loading}
+                >
                   {loading ? (
                     <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden></span>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden
+                      ></span>
                       Đang xác thực
                     </>
                   ) : (
@@ -170,7 +202,11 @@ const AdminLogin = ({ onLoginSuccess }) => {
                     </>
                   )}
                 </button>
-                <button type="button" className="btn btn-outline-light" onClick={resetToLogin}>
+                <button
+                  type="button"
+                  className="btn btn-outline-light"
+                  onClick={resetToLogin}
+                >
                   Đổi tài khoản
                 </button>
               </div>
@@ -180,7 +216,8 @@ const AdminLogin = ({ onLoginSuccess }) => {
           <ul className="admin-login-hints mt-4">
             <li>
               <i className="bi bi-dot" aria-hidden></i>
-              Tài khoản đã đăng nhập sẽ bị tự động đăng xuất sau 15 phút không hoạt động.
+              Tài khoản đã đăng nhập sẽ bị tự động đăng xuất sau 15 phút không
+              hoạt động.
             </li>
             <li>
               <i className="bi bi-dot" aria-hidden></i>

@@ -2,6 +2,15 @@ import React from "react";
 
 const TransactionDetailsModal = ({ tx, show, onClose }) => {
   if (!show || !tx) return null;
+  const signedAmount = Number(tx.signedAmount ?? tx.amount ?? 0);
+  const amountFormatter = new Intl.NumberFormat("vi-VN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+  const formattedAmount = `${
+    signedAmount >= 0 ? "+" : "-"
+  }${amountFormatter.format(Math.abs(signedAmount))} VND`;
+
   return (
     <div className="modal-backdrop">
       <div className="modal-card">
@@ -11,7 +20,11 @@ const TransactionDetailsModal = ({ tx, show, onClose }) => {
             <strong>Loại:</strong> {tx.type}
           </p>
           <p>
-            <strong>Số tiền:</strong> {tx.amount.toLocaleString("vi-VN")} VND
+            <strong>Mã tham chiếu:</strong>{" "}
+            {tx.reference || tx.referenceCode || "-"}
+          </p>
+          <p>
+            <strong>Số tiền:</strong> {formattedAmount}
           </p>
           <p>
             <strong>Từ:</strong> {tx.fromUsername || "-"}
@@ -23,7 +36,8 @@ const TransactionDetailsModal = ({ tx, show, onClose }) => {
             <strong>Mô tả:</strong> {tx.description}
           </p>
           <p>
-            <strong>Ngày giờ:</strong> {new Date(tx.createdAt).toLocaleString("vi-VN")}
+            <strong>Ngày giờ:</strong>{" "}
+            {new Date(tx.createdAt).toLocaleString("vi-VN")}
           </p>
         </div>
         <div className="modal-actions">

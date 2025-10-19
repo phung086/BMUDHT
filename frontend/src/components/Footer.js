@@ -2,7 +2,7 @@ import React from "react";
 
 const Footer = () => (
   <footer className="text-center text-muted mt-4 mb-4">
-    <small>Fintech Demo — prototype. Do not use real credentials.</small>
+    <small>Fintech Demo - 2025.</small>
   </footer>
 );
 

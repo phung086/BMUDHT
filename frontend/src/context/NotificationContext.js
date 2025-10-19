@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import api from "../services/api";
 import { getReferenceCode } from "../utils/reference";
+import { decodeTokenPayload } from "../utils/authSignal";
 
 const NotificationContext = createContext({
   notifications: [],
@@ -34,7 +35,7 @@ const saveReadState = (map) => {
   } catch (e) {}
 };
 
-const buildNotificationFromTransaction = (tx) => {
+const buildNotificationFromTransaction = (tx, activeUserId) => {
   const verb =
     tx.type === "deposit"
       ? "Nạp"
@@ -54,15 +55,20 @@ const buildNotificationFromTransaction = (tx) => {
       ? "Chuyển khoản thành công"
       : "Giao dịch";
   const decoratedTx = { ...tx, reference: getReferenceCode(tx) };
-  const direction = tx.type === "deposit" ? 1 : -1;
+  const baseAmount = Number(decoratedTx.amount || 0);
+  const isIncoming =
+    decoratedTx.type === "deposit" ||
+    (typeof activeUserId === "number" && decoratedTx.toUserId === activeUserId);
+  const signedAmount = isIncoming ? baseAmount : -baseAmount;
   return {
     id: String(tx.id),
     title,
     description: decoratedTx.description || `${verb} ${actor}`.trim(),
-    amount: direction * Number(decoratedTx.amount || 0),
+    amount: signedAmount,
     status: decoratedTx.status,
     createdAt: decoratedTx.createdAt,
     reference: decoratedTx.reference,
+    isIncoming,
     raw: decoratedTx,
   };
 };
@@ -76,8 +82,9 @@ export const NotificationProvider = ({ children }) => {
     setLoading(true);
     try {
       const res = await api.get("/api/transactions/history");
-      const items = (res.data?.transactions || []).map(
-        buildNotificationFromTransaction
+      const activeUserId = decodeTokenPayload()?.id;
+      const items = (res.data?.transactions || []).map((tx) =>
+        buildNotificationFromTransaction(tx, activeUserId)
       );
       setNotifications(
         items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))

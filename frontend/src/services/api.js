@@ -1,4 +1,17 @@
 import axios from "axios";
+import {
+  broadcastAuthChange,
+  clearToken,
+  isTokenExpired,
+  markSessionActive,
+  persistToken,
+  readToken,
+  shouldProactivelyRefresh,
+} from "../utils/authSignal";
+import {
+  ensureFreshAccessToken,
+  setSessionExpiredFlag,
+} from "../utils/sessionManager";
 
 // Create axios instance that points to the backend proxy (CRA will proxy /api to backend)
 const api = axios.create({
@@ -6,12 +19,22 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Attach Authorization token from localStorage if present
+// Attach Authorization token from session storage if present
 api.interceptors.request.use(async (config) => {
-  const token = localStorage.getItem("token");
+  let token = readToken();
+
+  if (token && (shouldProactivelyRefresh() || isTokenExpired())) {
+    try {
+      token = await ensureFreshAccessToken();
+    } catch (error) {
+      token = readToken();
+    }
+  }
+
   if (token) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
+    markSessionActive();
   }
 
   // For mutating requests, ensure we have X-CSRF-Token set. We store token on first fetch.
@@ -75,7 +98,8 @@ api.interceptors.response.use(
           );
           const newToken = res.data.accessToken;
           if (newToken) {
-            localStorage.setItem("token", newToken);
+            persistToken(newToken);
+            broadcastAuthChange();
             onRefreshed(newToken);
           }
           isRefreshing = false;
@@ -92,7 +116,9 @@ api.interceptors.response.use(
         });
       } catch (e) {
         // refresh failed — clear token and propagate error
-        localStorage.removeItem("token");
+        clearToken();
+        setSessionExpiredFlag();
+        broadcastAuthChange();
         return Promise.reject(error);
       }
     }

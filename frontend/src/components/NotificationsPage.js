@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import NotificationContext from "../context/NotificationContext";
 import TransactionDetailsModal from "./TransactionDetailsModal";
 import { usePreferences } from "../context/PreferencesContext";
+import { readToken } from "../utils/authSignal";
 
 const dictionary = {
   vi: {
@@ -104,7 +105,7 @@ const NotificationsPage = () => {
   const [selectedTx, setSelectedTx] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
-  const token = localStorage.getItem("token");
+  const token = readToken();
 
   useEffect(() => {
     if (!token) {
@@ -136,11 +137,13 @@ const NotificationsPage = () => {
   }, [grouped]);
 
   const formatCurrency = useCallback(
-    (amount) =>
-      Number(amount || 0).toLocaleString(locale, {
-        style: "currency",
-        currency: "VND",
-      }),
+    (amount) => {
+      const formattedNumber = Number(amount || 0).toLocaleString(locale, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      });
+      return `${formattedNumber} VND`;
+    },
     [locale]
   );
 

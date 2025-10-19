@@ -136,6 +136,7 @@ docker-compose up --build
 - Rate limiting and account lock after repeated login failures.
 - Field-level AES-256-GCM encryption for sensitive data.
 - Audit logging via Winston (`backend/logs/combined.log`, `error.log`).
+- Mandatory OTP on transfers with signed receipts including immutable reference codes. Set `ENABLE_REFERENCE_LOOKUP=true` (demo only) to expose the intentionally insecure lookup endpoint for social-engineering scenarios.
 
 ---
 
@@ -170,6 +171,7 @@ The payloads should fail; review server logs to verify sanitation and error hand
 4. **CSRF Attempt** – Craft a self-submitting HTML form to `/api/transactions/transfer` without the `X-CSRF-Token`; expect 403.
 5. **Token Replay** – Copy a victim `accessToken` from browser storage and call `/api/transactions/history` via `curl` or Postman.
 6. **Privilege Escalation** – Use a non-admin token to call `/api/admin/users`; confirm 403 and log entry.
+7. **Reference Replay (New)** – After a transfer, copy the reference from the success receipt. Enable `ENABLE_REFERENCE_LOOKUP=true` and request `/api/transactions/reference/<REF>` to illustrate how leaked references can expose transaction metadata or seed phishing scripts.
 
 Use the admin panel and log files to narrate detection and response.
 

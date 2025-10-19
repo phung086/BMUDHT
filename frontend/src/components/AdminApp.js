@@ -3,6 +3,13 @@ import AdminLogin from "./AdminLogin";
 import AdminDashboard from "./AdminDashboard";
 import api from "../services/api";
 import LoaderOverlay from "./LoaderOverlay";
+import {
+  broadcastAuthChange,
+  clearToken,
+  persistToken,
+  readToken,
+} from "../utils/authSignal";
+import { clearSessionExpiredFlag, serverLogout } from "../utils/sessionManager";
 
 const AdminApp = () => {
   const [accessToken, setAccessToken] = useState(null);
@@ -13,7 +20,7 @@ const AdminApp = () => {
     let mounted = true;
     (async () => {
       try {
-        const token = localStorage.getItem("token");
+        const token = readToken();
         if (!token) {
           setAccessToken(null);
           setError(null);
@@ -44,24 +51,24 @@ const AdminApp = () => {
     };
   }, []);
 
-  const handleLoginSuccess = (newAccessToken, refreshToken) => {
-    localStorage.setItem("token", newAccessToken);
+  const handleLoginSuccess = (newAccessToken) => {
+    persistToken(newAccessToken);
     setAccessToken(newAccessToken);
     setError(null);
-    if (refreshToken) {
-      try {
-        localStorage.setItem("refreshToken", refreshToken);
-      } catch (e) {
-        /* ignore quota errors */
-      }
-    }
+    broadcastAuthChange();
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("refreshToken");
+  const handleLogout = async () => {
+    try {
+      await serverLogout();
+    } catch (error) {
+      /* ignore */
+    }
+    clearToken();
+    clearSessionExpiredFlag();
     setAccessToken(null);
     setError(null);
+    broadcastAuthChange();
   };
 
   const state = useMemo(

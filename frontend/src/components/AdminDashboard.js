@@ -457,11 +457,11 @@ const AdminDashboard = ({ onLogout }) => {
       if (value === null || value === undefined || value === "") return "-";
 
       if (key === "amount" || key === "balance") {
-        return Number(value || 0).toLocaleString("vi-VN", {
-          style: "currency",
-          currency: "VND",
+        const formattedNumber = Number(value || 0).toLocaleString("vi-VN", {
           minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
         });
+        return `${formattedNumber} VND`;
       }
 
       if (key === "createdAt" || key === "timestamp") {
@@ -542,11 +542,14 @@ const AdminDashboard = ({ onLogout }) => {
   const summaryCards = useMemo(() => {
     if (!summary) return [];
     const formatNumber = (val) => Number(val || 0).toLocaleString("vi-VN");
-    const volume = Number(summary.totalVolume || 0).toLocaleString("vi-VN", {
-      style: "currency",
-      currency: "VND",
-      minimumFractionDigits: 0,
-    });
+    const volumeNumber = Number(summary.totalVolume || 0).toLocaleString(
+      "vi-VN",
+      {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }
+    );
+    const volume = `${volumeNumber} VND`;
 
     return [
       {

@@ -1,4 +1,18 @@
 import React from "react";
+import { usePreferences } from "../context/PreferencesContext";
+
+const dictionary = {
+  vi: {
+    cancel: "Hủy",
+    confirm: "Xác nhận",
+    processing: "Đang xử lý...",
+  },
+  en: {
+    cancel: "Cancel",
+    confirm: "Confirm",
+    processing: "Processing...",
+  },
+};
 
 const ConfirmModal = ({
   show,
@@ -7,7 +21,17 @@ const ConfirmModal = ({
   onConfirm,
   onCancel,
   confirming,
+  confirmDisabled = false,
+  cancelLabel,
+  confirmLabel,
+  processingLabel,
 }) => {
+  const { language } = usePreferences();
+  const text = dictionary[language] || dictionary.vi;
+  const cancelText = cancelLabel || text.cancel;
+  const confirmText = confirmLabel || text.confirm;
+  const processingText = processingLabel || text.processing;
+
   if (!show) return null;
   return (
     <div className="modal-backdrop">
@@ -20,14 +44,14 @@ const ConfirmModal = ({
             onClick={onCancel}
             disabled={confirming}
           >
-            Hủy
+            {cancelText}
           </button>
           <button
             className="btn btn-primary"
             onClick={onConfirm}
-            disabled={confirming}
+            disabled={confirming || confirmDisabled}
           >
-            {confirming ? "Đang..." : "Xác nhận"}
+            {confirming ? processingText : confirmText}
           </button>
         </div>
       </div>

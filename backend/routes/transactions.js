@@ -1,8 +1,19 @@
 const express = require("express");
 const { User, Transaction, Log } = require("../models");
 const { verifyToken, logAction } = require("../middleware/authMiddleware");
+const { generateReferenceCode } = require("../utils/reference");
+const {
+  registerReference,
+  lookupReference,
+  listRecentReferences,
+} = require("../utils/referenceLedger");
 
 const router = express.Router();
+
+const transferOtpStore = new Map();
+const TRANSFER_OTP_EXPIRY_MS = 5 * 60 * 1000;
+
+const createOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 // Middleware to verify token and log actions
 router.use(verifyToken);
@@ -29,23 +40,27 @@ router.get("/history", async (req, res) => {
     // Include from/to usernames for display while keeping encryptedDetails private
     const sanitized = await Promise.all(
       transactions.map(async (tx) => {
-        const fromUser = await User.findByPk(tx.fromUserId, {
+        const plain = tx.get({ plain: true });
+        const fromUser = await User.findByPk(plain.fromUserId, {
           attributes: ["username"],
         });
-        const toUser = await User.findByPk(tx.toUserId, {
+        const toUser = await User.findByPk(plain.toUserId, {
           attributes: ["username"],
         });
+        const reference = generateReferenceCode(plain);
         return {
-          id: tx.id,
-          fromUserId: tx.fromUserId,
-          toUserId: tx.toUserId,
+          id: plain.id,
+          fromUserId: plain.fromUserId,
+          toUserId: plain.toUserId,
           fromUsername: fromUser?.username,
           toUsername: toUser?.username,
-          amount: tx.amount,
-          type: tx.type,
-          status: tx.status,
-          description: tx.description,
-          createdAt: tx.createdAt,
+          amount: plain.amount,
+          type: plain.type,
+          status: plain.status,
+          description: plain.description,
+          createdAt: plain.createdAt,
+          reference,
+          referenceCode: reference,
         };
       })
     );
@@ -59,14 +74,50 @@ router.get("/history", async (req, res) => {
   }
 });
 
+// Request OTP before transfer
+router.post("/transfer/request-otp", async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findByPk(userId, {
+      attributes: ["id", "username", "email"],
+    });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const otp = createOtp();
+    const expiresAt = Date.now() + TRANSFER_OTP_EXPIRY_MS;
+    transferOtpStore.set(userId, { otp, expiresAt });
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        `[Transfer OTP] user=${user.username} email=${user.email} otp=${otp}`
+      );
+    }
+
+    res.json({
+      message: "OTP đã được gửi tới email bảo mật.",
+      otp: process.env.NODE_ENV !== "production" ? otp : undefined,
+      expiresIn: TRANSFER_OTP_EXPIRY_MS / 1000,
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to issue transfer OTP" });
+  }
+});
+
 // Transfer money to another user
 router.post("/transfer", async (req, res) => {
   try {
     const fromUserId = req.user.id;
-    const { toUsername, amount } = req.body;
+    const { toUsername, amount, otp, description } = req.body;
+    const numericAmount = Number(amount);
 
-    if (!toUsername || !amount || amount <= 0) {
+    if (!toUsername || !numericAmount || numericAmount <= 0) {
       return res.status(400).json({ error: "Invalid transfer data" });
+    }
+
+    if (!otp) {
+      return res.status(400).json({ error: "OTP is required for transfer" });
     }
 
     const fromUser = await User.findByPk(fromUserId);
@@ -79,15 +130,35 @@ router.post("/transfer", async (req, res) => {
       return res.status(404).json({ error: "Recipient not found" });
     }
 
-    if (fromUser.balance < amount) {
+    if (fromUser.balance < numericAmount) {
       return res.status(400).json({ error: "Insufficient balance" });
+    }
+
+    const otpRecord = transferOtpStore.get(fromUserId);
+    if (!otpRecord) {
+      return res
+        .status(400)
+        .json({ error: "Transfer OTP not found. Please request a new OTP." });
+    }
+
+    if (otpRecord.expiresAt < Date.now()) {
+      transferOtpStore.delete(fromUserId);
+      return res
+        .status(400)
+        .json({ error: "Transfer OTP has expired. Request a new code." });
+    }
+
+    if (otpRecord.otp !== String(otp)) {
+      return res.status(400).json({ error: "Invalid transfer OTP" });
     }
 
     // Transaction atomicity
     const sequelize = require("../models").sequelize;
+    let createdTransaction = null;
+
     await sequelize.transaction(async (t) => {
-      fromUser.balance -= amount;
-      toUser.balance += amount;
+      fromUser.balance -= numericAmount;
+      toUser.balance += numericAmount;
 
       await fromUser.save({ transaction: t });
       await toUser.save({ transaction: t });
@@ -95,14 +166,17 @@ router.post("/transfer", async (req, res) => {
       const details = { from: fromUser.username, to: toUser.username };
       const { encrypt } = require("../utils/aes");
 
-      await Transaction.create(
+      createdTransaction = await Transaction.create(
         {
           fromUserId,
           toUserId: toUser.id,
-          amount,
+          amount: numericAmount,
           type: "transfer",
           status: "completed",
-          description: `Transfer from ${fromUser.username} to ${toUser.username}`,
+          description:
+            typeof description === "string" && description.trim().length
+              ? description.trim()
+              : `Transfer from ${fromUser.username} to ${toUser.username}`,
           encryptedDetails: encrypt(JSON.stringify(details)),
         },
         { transaction: t }
@@ -113,7 +187,7 @@ router.post("/transfer", async (req, res) => {
         {
           userId: fromUserId,
           action: "transfer",
-          details: `Transferred ${amount} to ${toUser.username}`,
+          details: `Transferred ${numericAmount} to ${toUser.username}`,
           ipAddress: req.ip,
           userAgent: req.get("User-Agent"),
         },
@@ -121,10 +195,80 @@ router.post("/transfer", async (req, res) => {
       );
     });
 
-    res.json({ message: "Transfer successful" });
+    transferOtpStore.delete(fromUserId);
+
+    const referencePayload = {
+      id: createdTransaction.id,
+      createdAt: createdTransaction.createdAt,
+      amount: createdTransaction.amount,
+      type: createdTransaction.type,
+      status: createdTransaction.status,
+      description: createdTransaction.description,
+    };
+
+    const reference = generateReferenceCode(referencePayload);
+
+    registerReference(reference, {
+      amount: numericAmount,
+      fromUser: fromUser.username,
+      toUser: toUser.username,
+      createdAt: createdTransaction.createdAt,
+      description: createdTransaction.description,
+    });
+
+    await Log.create({
+      userId: fromUserId,
+      action: "transfer_reference",
+      details: `Reference ${reference} issued for transfer to ${toUser.username}`,
+      ipAddress: req.ip,
+      userAgent: req.get("User-Agent"),
+    });
+
+    res.json({
+      message: "Transfer successful",
+      transfer: {
+        id: createdTransaction.id,
+        reference,
+        amount: numericAmount,
+        fromUsername: fromUser.username,
+        toUsername: toUser.username,
+        createdAt: createdTransaction.createdAt,
+        description: createdTransaction.description,
+        status: createdTransaction.status,
+      },
+    });
   } catch (error) {
     res.status(500).json({ error: "Transfer failed" });
   }
+});
+
+router.get("/reference/:code", (req, res) => {
+  if (process.env.ENABLE_REFERENCE_LOOKUP !== "true") {
+    return res.status(404).json({ error: "Reference lookup is disabled" });
+  }
+
+  const record = lookupReference(req.params.code);
+  if (!record) {
+    return res.status(404).json({ error: "Reference not found" });
+  }
+
+  res.json({
+    reference: record.reference,
+    amount: record.amount,
+    fromUser: record.fromUser,
+    toUser: record.toUser,
+    createdAt: record.createdAt,
+    description: record.description,
+    recordedAt: record.recordedAt,
+  });
+});
+
+router.get("/reference", (req, res) => {
+  if (process.env.ENABLE_REFERENCE_LOOKUP !== "true") {
+    return res.status(404).json({ error: "Reference lookup is disabled" });
+  }
+
+  res.json({ references: listRecentReferences() });
 });
 
 // Deposit money (for demo purposes)
@@ -133,7 +277,9 @@ router.post("/deposit", async (req, res) => {
     const userId = req.user.id;
     const { amount } = req.body;
 
-    if (!amount || amount <= 0) {
+    const numericAmount = Number(amount);
+
+    if (!numericAmount || numericAmount <= 0) {
       return res.status(400).json({ error: "Invalid deposit amount" });
     }
 
@@ -142,14 +288,14 @@ router.post("/deposit", async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    user.balance += amount;
+    user.balance += numericAmount;
     await user.save();
 
     const { encrypt } = require("../utils/aes");
     await Transaction.create({
       fromUserId: userId,
       toUserId: userId,
-      amount,
+      amount: numericAmount,
       type: "deposit",
       status: "completed",
       description: "Deposit",
@@ -159,7 +305,7 @@ router.post("/deposit", async (req, res) => {
     await Log.create({
       userId: userId,
       action: "deposit",
-      details: `Deposited ${amount}`,
+      details: `Deposited ${numericAmount}`,
       ipAddress: req.ip,
       userAgent: req.get("User-Agent"),
     });

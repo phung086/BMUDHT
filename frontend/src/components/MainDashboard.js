@@ -12,9 +12,12 @@ import ConfirmModal from "./ConfirmModal";
 import Toast from "./Toast";
 import MfaSetup from "./MfaSetup";
 import TransactionDetailsModal from "./TransactionDetailsModal";
+import TransferSuccessModal from "./TransferSuccessModal";
 import NotificationContext from "../context/NotificationContext";
 import { usePreferences } from "../context/PreferencesContext";
 import { getReferenceCode } from "../utils/reference";
+import { decodeTokenPayload, readToken } from "../utils/authSignal";
+import localizeBackendMessage from "../utils/i18n";
 
 const dictionary = {
   vi: {
@@ -83,12 +86,38 @@ const dictionary = {
     transferAmount: "Số tiền (VND)",
     transferNote: "Ghi chú (không bắt buộc)",
     submitTransfer: "Chuyển khoản",
+    transferOtpLabel: "Mã OTP chuyển tiền",
+    transferOtpPlaceholder: "Nhập mã OTP 6 chữ số",
+    transferOtpHint:
+      "OTP có hiệu lực trong 5 phút. Kiểm tra email bảo mật hoặc bảng log (môi trường demo).",
+    transferOtpSent: "OTP đã được gửi. Vui lòng nhập mã để xác nhận.",
+    transferOtpDevLabel: "Mã demo",
+    transferOtpMissing: "Vui lòng nhập mã OTP để tiếp tục.",
+    transferOtpInvalid: "Mã OTP phải gồm 6 chữ số.",
+    transferOtpRequesting: "Đang gửi OTP",
+    transferOtpIncomplete:
+      "Vui lòng nhập tài khoản nhận và số tiền trước khi yêu cầu OTP.",
+    transferOtpRequest: "Gửi OTP",
+    transferOtpResend: "Gửi lại OTP",
+    transferInvalid: "Vui lòng nhập tài khoản nhận và số tiền hợp lệ.",
     processing: "Đang xử lý",
     syncing: "Đang đồng bộ...",
     depositSuccess: "Nạp tiền thành công",
     depositFail: "Nạp tiền thất bại",
     transferSuccess: "Chuyển khoản thành công",
     transferFail: "Chuyển khoản thất bại",
+    transferSuccessTitle: "Giao dịch đã hoàn tất",
+    transferSuccessSubtitle: "Biên lai chuyển khoản trực tuyến",
+    transferSuccessReferenceLabel: "Mã chuyển khoản",
+    transferSuccessAmountLabel: "Số tiền",
+    transferSuccessSenderLabel: "Người chuyển",
+    transferSuccessRecipientLabel: "Người nhận",
+    transferSuccessTimeLabel: "Thời gian thực hiện",
+    transferSuccessNoteLabel: "Ghi chú",
+    transferSuccessCopy: "Sao chép mã",
+    transferSuccessCopied: "Đã sao chép mã chuyển khoản",
+    transferSuccessClose: "Đóng biên lai",
+    transferSuccessCopyFail: "Không thể sao chép mã, vui lòng thử lại.",
     analyticsTitle: "Tổng quan tháng này",
     analyticsIncoming: "Tiền vào",
     analyticsOutgoing: "Tiền ra",
@@ -194,12 +223,38 @@ const dictionary = {
     transferAmount: "Amount (VND)",
     transferNote: "Note (optional)",
     submitTransfer: "Transfer",
+    transferOtpLabel: "Transfer OTP code",
+    transferOtpPlaceholder: "Enter 6-digit OTP",
+    transferOtpHint:
+      "OTP remains valid for 5 minutes. Check your secure email (demo shows the code below).",
+    transferOtpSent: "OTP sent. Please enter the code to confirm.",
+    transferOtpDevLabel: "Demo code",
+    transferOtpMissing: "Please enter the OTP to continue.",
+    transferOtpRequesting: "Sending OTP",
+    transferOtpInvalid: "OTP must contain 6 digits.",
+    transferOtpIncomplete:
+      "Enter recipient and amount before requesting an OTP.",
+    transferOtpRequest: "Send OTP",
+    transferOtpResend: "Resend OTP",
+    transferInvalid: "Enter a valid recipient and transfer amount.",
     processing: "Processing",
     syncing: "Syncing...",
     depositSuccess: "Top-up successful",
     depositFail: "Top-up failed",
     transferSuccess: "Transfer successful",
     transferFail: "Transfer failed",
+    transferSuccessTitle: "Transfer completed",
+    transferSuccessSubtitle: "Digital transfer receipt",
+    transferSuccessReferenceLabel: "Transfer reference",
+    transferSuccessAmountLabel: "Amount",
+    transferSuccessSenderLabel: "Sender",
+    transferSuccessRecipientLabel: "Recipient",
+    transferSuccessTimeLabel: "Timestamp",
+    transferSuccessNoteLabel: "Note",
+    transferSuccessCopy: "Copy reference",
+    transferSuccessCopied: "Reference copied to clipboard",
+    transferSuccessClose: "Close receipt",
+    transferSuccessCopyFail: "Unable to copy the reference. Please try again.",
     analyticsTitle: "Monthly overview",
     analyticsIncoming: "Cash in",
     analyticsOutgoing: "Cash out",
@@ -307,12 +362,37 @@ const useTokenProfile = (token) => {
   }, [token]);
 };
 
-const decorateTransactions = (items) =>
-  (items || []).map((tx) => ({ ...tx, reference: getReferenceCode(tx) }));
+const decorateTransactions = (items, currentUserId) => {
+  const ownerId =
+    currentUserId !== null && currentUserId !== undefined
+      ? Number(currentUserId)
+      : null;
+  const hasOwnerId = Number.isFinite(ownerId);
+
+  return (items || []).map((tx) => {
+    const baseAmount = Number(tx.amount || 0);
+    const isIncoming =
+      tx.type === "deposit" || (hasOwnerId && tx.toUserId === ownerId);
+    const signedAmount = isIncoming ? baseAmount : -baseAmount;
+    return {
+      ...tx,
+      reference: getReferenceCode(tx),
+      isIncoming,
+      signedAmount,
+    };
+  });
+};
+
+const createInitialOtpStatus = () => ({
+  sending: false,
+  sent: false,
+  expiresIn: null,
+  requestedAt: null,
+});
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
+  const token = readToken();
   const profile = useTokenProfile(token);
   const { language } = usePreferences();
   const text = dictionary[language] || dictionary.vi;
@@ -327,6 +407,7 @@ const Dashboard = () => {
     toUsername: "",
     amount: "",
     description: "",
+    otp: "",
   });
   const [toast, setToast] = useState({
     show: false,
@@ -338,24 +419,90 @@ const Dashboard = () => {
     payload: null,
     confirming: false,
   });
+  const [transferSuccess, setTransferSuccess] = useState({
+    show: false,
+    details: null,
+  });
   const [dataLoading, setDataLoading] = useState(false);
   const [depositLoading, setDepositLoading] = useState(false);
   const [transferLoading, setTransferLoading] = useState(false);
+  const [transferOtpStatus, setTransferOtpStatus] = useState(() =>
+    createInitialOtpStatus()
+  );
   const [selectedTx, setSelectedTx] = useState(null);
   const [showTxModal, setShowTxModal] = useState(false);
   const [infoModal, setInfoModal] = useState({ show: false, key: null });
   const [showBalance, setShowBalance] = useState(true);
+  const [otpErrorMessage, setOtpErrorMessage] = useState(null);
+  const [otpShake, setOtpShake] = useState(false);
 
   const { refresh: refreshNotifications } = useContext(NotificationContext);
 
+  const fallbackPayload = useMemo(() => decodeTokenPayload(token), [token]);
+  const userProfileId = userProfile?.id ?? null;
+  const profileId = profile?.id ?? null;
+  const fallbackUserId = fallbackPayload?.id ?? null;
+
+  const currentUserId = useMemo(() => {
+    const candidates = [userProfileId, profileId, fallbackUserId];
+    for (const candidate of candidates) {
+      const numeric = Number(candidate);
+      if (Number.isFinite(numeric)) {
+        return numeric;
+      }
+    }
+    return null;
+  }, [userProfileId, profileId, fallbackUserId]);
+
+  const currentUsername = useMemo(() => {
+    const candidates = [
+      userProfile?.username,
+      profile?.username,
+      fallbackPayload?.username,
+    ];
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim().length) {
+        return candidate;
+      }
+    }
+    return "";
+  }, [userProfile?.username, profile?.username, fallbackPayload?.username]);
+
   const depositRef = useRef(null);
   const transferRef = useRef(null);
+  const otpInputRef = useRef(null);
+  const otpShakeTimerRef = useRef(null);
+
+  const showToast = useCallback(
+    (type, serverMessage, fallbackMessage) => {
+      setToast({
+        show: true,
+        type,
+        message: localizeBackendMessage(
+          language,
+          serverMessage,
+          fallbackMessage
+        ),
+      });
+    },
+    [language]
+  );
 
   useEffect(() => {
     if (!token) {
       navigate("/login");
     }
   }, [token, navigate]);
+
+  useEffect(() => {
+    const timerRef = otpShakeTimerRef;
+    return () => {
+      const timerId = timerRef.current;
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+    };
+  }, [otpShakeTimerRef]);
 
   useEffect(() => {
     let mounted = true;
@@ -367,18 +514,18 @@ const Dashboard = () => {
         const res = await api.get("/api/transactions/history");
         if (!mounted) return;
         setBalance(res.data?.balance || 0);
-        setTransactions(decorateTransactions(res.data?.transactions || []));
+        setTransactions(
+          decorateTransactions(res.data?.transactions || [], currentUserId)
+        );
       } catch (error) {
         if (mounted) {
-          setToast({
-            show: true,
-            type: "error",
-            message:
-              error.response?.data?.error ||
-              (language === "vi"
-                ? "Không thể tải lịch sử giao dịch"
-                : "Unable to load history"),
-          });
+          showToast(
+            "error",
+            error.response?.data?.error,
+            language === "vi"
+              ? "Không thể tải lịch sử giao dịch"
+              : "Unable to load history"
+          );
         }
       } finally {
         if (mounted) {
@@ -392,7 +539,7 @@ const Dashboard = () => {
     return () => {
       mounted = false;
     };
-  }, [token, language]);
+  }, [token, language, currentUserId, showToast]);
 
   useEffect(() => {
     if (!token) return;
@@ -406,17 +553,15 @@ const Dashboard = () => {
         setProfileError(null);
       } catch (error) {
         if (cancelled) return;
-        const message =
-          error.response?.data?.error ||
-          (language === "vi"
+        const message = localizeBackendMessage(
+          language,
+          error.response?.data?.error,
+          language === "vi"
             ? "Không thể tải hồ sơ người dùng"
-            : "Unable to load user profile");
+            : "Unable to load user profile"
+        );
         setProfileError(message);
-        setToast({
-          show: true,
-          type: "error",
-          message,
-        });
+        showToast("error", error.response?.data?.error, message);
       } finally {
         if (!cancelled) {
           setProfileLoading(false);
@@ -429,15 +574,137 @@ const Dashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [token, language]);
+  }, [token, language, showToast]);
 
   const handleDepositChange = (event) => {
     setDepositAmount(event.target.value);
   };
 
   const handleTransferChange = (event) => {
-    const { name, value } = event.target;
-    setTransferData((current) => ({ ...current, [name]: value }));
+    const { name } = event.target;
+    const rawValue = event.target.value;
+    const sanitizedValue =
+      name === "otp" ? rawValue.replace(/\D/g, "").slice(0, 6) : rawValue;
+    const shouldResetOtp = name === "toUsername" || name === "amount";
+
+    setTransferData((current) => ({
+      ...current,
+      [name]: sanitizedValue,
+      ...(shouldResetOtp ? { otp: "" } : {}),
+    }));
+
+    if (shouldResetOtp) {
+      setTransferOtpStatus(createInitialOtpStatus());
+      setOtpErrorMessage(null);
+      setOtpShake(false);
+      if (otpShakeTimerRef.current) {
+        clearTimeout(otpShakeTimerRef.current);
+        otpShakeTimerRef.current = null;
+      }
+    }
+
+    if (name === "otp") {
+      setOtpErrorMessage(null);
+      setOtpShake(false);
+      if (otpShakeTimerRef.current) {
+        clearTimeout(otpShakeTimerRef.current);
+        otpShakeTimerRef.current = null;
+      }
+    }
+  };
+
+  const triggerOtpError = useCallback((message) => {
+    setOtpErrorMessage(message);
+    setOtpShake(true);
+    if (otpShakeTimerRef.current) {
+      clearTimeout(otpShakeTimerRef.current);
+    }
+    otpShakeTimerRef.current = setTimeout(() => {
+      setOtpShake(false);
+      otpShakeTimerRef.current = null;
+    }, 450);
+    if (otpInputRef.current) {
+      otpInputRef.current.focus();
+    }
+  }, []);
+
+  const handleCopyReference = useCallback(
+    async (reference) => {
+      if (!reference) return;
+      try {
+        const clipboardAvailable =
+          typeof navigator !== "undefined" &&
+          navigator.clipboard &&
+          typeof navigator.clipboard.writeText === "function";
+
+        if (clipboardAvailable) {
+          await navigator.clipboard.writeText(reference);
+        } else if (typeof document !== "undefined") {
+          const tempInput = document.createElement("textarea");
+          tempInput.value = reference;
+          tempInput.setAttribute("readonly", "");
+          tempInput.style.position = "absolute";
+          tempInput.style.left = "-9999px";
+          document.body.appendChild(tempInput);
+          tempInput.select();
+          document.execCommand("copy");
+          document.body.removeChild(tempInput);
+        } else {
+          throw new Error("Clipboard unavailable");
+        }
+        showToast("success", null, text.transferSuccessCopied);
+      } catch (error) {
+        showToast("error", null, text.transferSuccessCopyFail);
+      }
+    },
+    [showToast, text.transferSuccessCopied, text.transferSuccessCopyFail]
+  );
+
+  const handleRequestTransferOtp = async () => {
+    if (transferOtpStatus.sending) return;
+
+    const trimmedRecipient = transferData.toUsername.trim();
+    const amountValue = Number(transferData.amount);
+
+    if (
+      !trimmedRecipient ||
+      !Number.isFinite(amountValue) ||
+      amountValue <= 0
+    ) {
+      showToast("error", null, text.transferOtpIncomplete);
+      return;
+    }
+
+    setTransferData((current) => ({
+      ...current,
+      otp: "",
+    }));
+
+    setOtpErrorMessage(null);
+    setOtpShake(false);
+    if (otpShakeTimerRef.current) {
+      clearTimeout(otpShakeTimerRef.current);
+      otpShakeTimerRef.current = null;
+    }
+
+    setTransferOtpStatus({
+      ...createInitialOtpStatus(),
+      sending: true,
+    });
+
+    try {
+      const res = await api.post("/api/transactions/transfer/request-otp");
+      setTransferOtpStatus({
+        sending: false,
+        sent: true,
+        expiresIn: res.data?.expiresIn ?? null,
+        requestedAt: Date.now(),
+      });
+      showToast("success", res.data?.message, text.transferOtpSent);
+    } catch (error) {
+      setTransferOtpStatus(createInitialOtpStatus());
+      showToast("error", error.response?.data?.error, text.transferFail);
+    }
   };
 
   const handleDepositSubmit = async (event) => {
@@ -447,24 +714,16 @@ const Dashboard = () => {
       const res = await api.post("/api/transactions/deposit", {
         amount: Number(depositAmount),
       });
-      setToast({
-        show: true,
-        type: "success",
-        message: res.data?.message || text.depositSuccess,
-      });
+      showToast("success", res.data?.message, text.depositSuccess);
       setDepositAmount("");
       const historyRes = await api.get("/api/transactions/history");
       setBalance(historyRes.data?.balance || 0);
       setTransactions(
-        decorateTransactions(historyRes.data?.transactions || [])
+        decorateTransactions(historyRes.data?.transactions || [], currentUserId)
       );
       await refreshNotifications().catch(() => {});
     } catch (error) {
-      setToast({
-        show: true,
-        type: "error",
-        message: error.response?.data?.error || text.depositFail,
-      });
+      showToast("error", error.response?.data?.error, text.depositFail);
     } finally {
       setDepositLoading(false);
     }
@@ -472,7 +731,51 @@ const Dashboard = () => {
 
   const handleTransferSubmit = (event) => {
     event.preventDefault();
-    setConfirm({ show: true, payload: { ...transferData }, confirming: false });
+
+    if (transferSuccess.show) {
+      setTransferSuccess({ show: false, details: null });
+    }
+
+    const trimmedRecipient = transferData.toUsername.trim();
+    const amountValue = Number(transferData.amount);
+    const sanitizedDescription = (transferData.description || "").trim();
+    const sanitizedOtp = (transferData.otp || "").trim();
+
+    if (
+      !trimmedRecipient ||
+      !Number.isFinite(amountValue) ||
+      amountValue <= 0
+    ) {
+      showToast("error", null, text.transferInvalid);
+      return;
+    }
+
+    if (!sanitizedOtp) {
+      triggerOtpError(text.transferOtpMissing);
+      showToast("error", null, text.transferOtpMissing);
+      return;
+    }
+
+    if (!/^\d{6}$/.test(sanitizedOtp)) {
+      triggerOtpError(text.transferOtpInvalid);
+      showToast("error", null, text.transferOtpInvalid);
+      return;
+    }
+
+    setOtpErrorMessage(null);
+    setOtpShake(false);
+
+    setConfirm({
+      show: true,
+      payload: {
+        toUsername: trimmedRecipient,
+        amountValue,
+        amountLabel: formatCurrency(amountValue),
+        description: sanitizedDescription,
+        otp: sanitizedOtp,
+      },
+      confirming: false,
+    });
   };
 
   const confirmTransfer = async () => {
@@ -481,28 +784,72 @@ const Dashboard = () => {
     try {
       const payload = {
         toUsername: confirm.payload?.toUsername,
-        amount: confirm.payload?.amount,
-        description: confirm.payload?.description,
+        amount: confirm.payload?.amountValue,
+        description: confirm.payload?.description || "",
+        otp: confirm.payload?.otp,
       };
       const res = await api.post("/api/transactions/transfer", payload);
-      setToast({
-        show: true,
-        type: "success",
-        message: res.data?.message || text.transferSuccess,
+      showToast("success", res.data?.message, text.transferSuccess);
+
+      const transferResponse = res.data?.transfer || null;
+      const numericAmount = Number(
+        transferResponse?.amount ??
+          confirm.payload?.amountValue ??
+          payload.amount
+      );
+      const resolvedReference = getReferenceCode({
+        id: transferResponse?.id,
+        createdAt: transferResponse?.createdAt || new Date().toISOString(),
+        amount: numericAmount,
+        type: "transfer",
+        status: transferResponse?.status || "completed",
+        description:
+          transferResponse?.description || confirm.payload?.description || "",
+        referenceCode: transferResponse?.reference,
       });
-      setTransferData({ toUsername: "", amount: "", description: "" });
+
+      setTransferSuccess({
+        show: true,
+        details: {
+          reference: transferResponse?.reference || resolvedReference,
+          amountLabel: formatSignedCurrency(-Math.abs(numericAmount)),
+          sender: transferResponse?.fromUsername || currentUsername || "",
+          recipient:
+            transferResponse?.toUsername ||
+            confirm.payload?.toUsername ||
+            payload.toUsername,
+          createdAt: transferResponse?.createdAt || new Date().toISOString(),
+          description:
+            transferResponse?.description || confirm.payload?.description || "",
+        },
+      });
+
+      setTransferData({
+        toUsername: "",
+        amount: "",
+        description: "",
+        otp: "",
+      });
+      setTransferOtpStatus(createInitialOtpStatus());
       const historyRes = await api.get("/api/transactions/history");
       setBalance(historyRes.data?.balance || 0);
       setTransactions(
-        decorateTransactions(historyRes.data?.transactions || [])
+        decorateTransactions(historyRes.data?.transactions || [], currentUserId)
       );
       await refreshNotifications().catch(() => {});
     } catch (error) {
-      setToast({
-        show: true,
-        type: "error",
-        message: error.response?.data?.error || text.transferFail,
-      });
+      const serverError = error.response?.data?.error;
+      if (serverError?.includes("OTP")) {
+        setTransferOtpStatus(createInitialOtpStatus());
+        setTransferData((curr) => ({
+          ...curr,
+          otp: "",
+        }));
+        triggerOtpError(
+          localizeBackendMessage(language, serverError, text.transferOtpInvalid)
+        );
+      }
+      showToast("error", serverError, text.transferFail);
     } finally {
       setTransferLoading(false);
       setConfirm({ show: false, payload: null, confirming: false });
@@ -512,12 +859,22 @@ const Dashboard = () => {
   const formatCurrency = useCallback(
     (amount) => {
       const locale = language === "vi" ? "vi-VN" : "en-US";
-      return Number(amount || 0).toLocaleString(locale, {
-        style: "currency",
-        currency: "VND",
+      const formattedNumber = Number(amount || 0).toLocaleString(locale, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
       });
+      return `${formattedNumber} VND`;
     },
     [language]
+  );
+
+  const formatSignedCurrency = useCallback(
+    (value) => {
+      const numeric = Number(value || 0);
+      const prefix = numeric >= 0 ? "+" : "-";
+      return `${prefix}${formatCurrency(Math.abs(numeric))}`;
+    },
+    [formatCurrency]
   );
 
   const insightData = useMemo(() => {
@@ -542,12 +899,20 @@ const Dashboard = () => {
     });
 
     const monthlyIncoming = monthly
-      .filter((tx) => tx.type === "deposit")
-      .reduce((total, tx) => total + Number(tx.amount || 0), 0);
+      .filter((tx) => tx.isIncoming)
+      .reduce(
+        (total, tx) =>
+          total + Math.abs(tx.signedAmount ?? Number(tx.amount || 0)),
+        0
+      );
 
     const monthlyOutgoing = monthly
-      .filter((tx) => tx.type === "transfer")
-      .reduce((total, tx) => total + Number(tx.amount || 0), 0);
+      .filter((tx) => !tx.isIncoming)
+      .reduce(
+        (total, tx) =>
+          total + Math.abs(tx.signedAmount ?? Number(tx.amount || 0)),
+        0
+      );
 
     const pendingCount = transactions.filter(
       (tx) => tx.status === "pending"
@@ -581,11 +946,12 @@ const Dashboard = () => {
       completedTx.length === 0
         ? 0
         : completedTx.reduce(
-            (sum, tx) => sum + Math.abs(Number(tx.amount || 0)),
+            (sum, tx) =>
+              sum + Math.abs(tx.signedAmount ?? Number(tx.amount || 0)),
             0
           ) / completedTx.length;
     const largestTx = transactions.reduce((largest, tx) => {
-      const amount = Math.abs(Number(tx.amount || 0));
+      const amount = Math.abs(tx.signedAmount ?? Number(tx.amount || 0));
       if (!largest || amount > largest.amount) {
         return { ...tx, amount };
       }
@@ -680,10 +1046,10 @@ const Dashboard = () => {
       const created = new Date(tx.createdAt);
       const bucket = buckets[created.toDateString()];
       if (!bucket) return;
-      const amount = Number(tx.amount || 0);
-      if (tx.type === "deposit") {
+      const amount = Math.abs(tx.signedAmount ?? Number(tx.amount || 0));
+      if (tx.isIncoming) {
         bucket.incoming += amount;
-      } else if (tx.type === "transfer") {
+      } else {
         bucket.outgoing += amount;
       }
     });
@@ -793,16 +1159,18 @@ const Dashboard = () => {
     [language]
   );
 
+  const confirmAmountLabel = confirm.payload?.amountLabel;
+
   const confirmTitle = confirm.payload
     ? language === "vi"
-      ? `Xác nhận chuyển ${confirm.payload.amount || ""} VND`
-      : `Confirm transfer of ${confirm.payload.amount || ""} VND`
+      ? `Xác nhận chuyển ${confirmAmountLabel || ""}`
+      : `Confirm transfer of ${confirmAmountLabel || ""}`
     : "";
 
   const confirmBodyIntro = confirm.payload
     ? language === "vi"
-      ? `Bạn sẽ chuyển ${confirm.payload.amount} tới ${confirm.payload.toUsername}.`
-      : `You are about to send ${confirm.payload.amount} to ${confirm.payload.toUsername}.`
+      ? `Bạn sẽ chuyển ${confirmAmountLabel} tới ${confirm.payload.toUsername}.`
+      : `You are about to send ${confirmAmountLabel} to ${confirm.payload.toUsername}.`
     : "";
 
   const confirmNoteLabel = language === "vi" ? "Ghi chú" : "Note";
@@ -810,6 +1178,14 @@ const Dashboard = () => {
     language === "vi"
       ? "Bạn có chắc chắn muốn tiếp tục?"
       : "Are you sure you want to continue?";
+
+  const otpInputClasses = [
+    "form-control",
+    otpErrorMessage ? "is-invalid" : "",
+    otpShake ? "field-animate-shake" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="dashboard-page">
@@ -821,6 +1197,15 @@ const Dashboard = () => {
         onClose={closeInfoModal}
       />
 
+      <TransferSuccessModal
+        show={transferSuccess.show}
+        details={transferSuccess.details}
+        onClose={() => setTransferSuccess({ show: false, details: null })}
+        onCopy={handleCopyReference}
+        text={text}
+        language={language}
+      />
+
       <ConfirmModal
         show={confirm.show}
         title={confirmTitle}
@@ -830,6 +1215,11 @@ const Dashboard = () => {
             {confirm.payload?.description && (
               <p className="mb-0">
                 {confirmNoteLabel}: {confirm.payload.description}
+              </p>
+            )}
+            {confirm.payload?.otp && (
+              <p className="mb-0">
+                OTP: <code>{confirm.payload.otp}</code>
               </p>
             )}
             <p>{confirmPrompt}</p>
@@ -887,8 +1277,7 @@ const Dashboard = () => {
                     netChange >= 0 ? "trend-positive" : "trend-negative"
                   }
                 >
-                  {netChange >= 0 ? "+" : "-"}
-                  {formatCurrency(Math.abs(netChange))}
+                  {formatSignedCurrency(netChange)}
                 </span>
                 <small>{text.netChange}</small>
               </div>
@@ -948,7 +1337,10 @@ const Dashboard = () => {
                   {text.lastActivityPrefix} ·{" "}
                   {formatTimestamp(insightData.lastTransaction.createdAt)} ·{" "}
                   {transactionLabel(insightData.lastTransaction.type)}{" "}
-                  {formatCurrency(insightData.lastTransaction.amount)}
+                  {formatSignedCurrency(
+                    insightData.lastTransaction.signedAmount ??
+                      insightData.lastTransaction.amount
+                  )}
                 </div>
               ) : (
                 <div className="hero-meta__item">{text.lastActivityEmpty}</div>
@@ -1140,6 +1532,84 @@ const Dashboard = () => {
                         {text.transferNote}
                       </label>
                     </div>
+                  </div>
+                  <div className="col-12">
+                    <div className="row g-2 align-items-end">
+                      <div className="col-12 col-sm-7">
+                        <div
+                          className={`form-floating ${
+                            otpErrorMessage ? "has-validation-error" : ""
+                          }`}
+                        >
+                          <input
+                            id="transferOtp"
+                            name="otp"
+                            inputMode="numeric"
+                            maxLength={6}
+                            autoComplete="one-time-code"
+                            value={transferData.otp}
+                            onChange={handleTransferChange}
+                            className={otpInputClasses}
+                            ref={otpInputRef}
+                            aria-invalid={otpErrorMessage ? "true" : undefined}
+                            aria-describedby={
+                              otpErrorMessage ? "transferOtpError" : undefined
+                            }
+                            placeholder={text.transferOtpPlaceholder}
+                          />
+                          <label htmlFor="transferOtp">
+                            {text.transferOtpLabel}
+                          </label>
+                        </div>
+                        {otpErrorMessage && (
+                          <small
+                            id="transferOtpError"
+                            className="text-danger d-block mt-1"
+                          >
+                            {otpErrorMessage}
+                          </small>
+                        )}
+                      </div>
+                      <div className="col-12 col-sm-5">
+                        <button
+                          type="button"
+                          className="btn btn-outline-primary w-100"
+                          onClick={handleRequestTransferOtp}
+                          disabled={
+                            transferOtpStatus.sending || transferLoading
+                          }
+                        >
+                          {transferOtpStatus.sending ? (
+                            <>
+                              <span
+                                className="spinner-border spinner-border-sm me-2"
+                                role="status"
+                                aria-hidden
+                              ></span>
+                              {text.transferOtpRequesting}
+                            </>
+                          ) : (
+                            <>
+                              <i
+                                className="bi bi-shield-lock me-2"
+                                aria-hidden
+                              ></i>
+                              {transferOtpStatus.sent
+                                ? text.transferOtpResend
+                                : text.transferOtpRequest}
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    <small className="text-muted d-block mt-2">
+                      {text.transferOtpHint}
+                    </small>
+                    {transferOtpStatus.sent && (
+                      <small className="text-success d-block">
+                        {text.transferOtpSent}
+                      </small>
+                    )}
                   </div>
                 </div>
                 <button
@@ -1381,12 +1851,12 @@ const Dashboard = () => {
                   </div>
                   <div className="text-end">
                     <div
-                      className={
-                        tx.type === "deposit" ? "text-success" : "text-danger"
-                      }
+                      className={tx.isIncoming ? "text-success" : "text-danger"}
                     >
-                      {tx.type === "deposit" ? "+" : "-"}
-                      {formatCurrency(tx.amount)}
+                      {tx.isIncoming ? "+" : "-"}
+                      {formatCurrency(
+                        Math.abs(tx.signedAmount ?? Number(tx.amount || 0))
+                      )}
                     </div>
                     <span className={statusClass}>{statusText}</span>
                   </div>
