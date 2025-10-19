@@ -103,3 +103,5 @@
 {"level":"info","message":"Database connected","service":"fintech-backend","timestamp":"2025-10-18T07:34:48.432Z"}
 {"level":"info","message":"Server running on port 3001","service":"fintech-backend","timestamp":"2025-10-18T07:38:45.127Z"}
 {"level":"info","message":"Database connected","service":"fintech-backend","timestamp":"2025-10-18T07:38:45.133Z"}
+{"level":"info","message":"Server running on port 3001","service":"fintech-backend","timestamp":"2025-10-18T07:43:40.704Z"}
+{"level":"info","message":"Database connected","service":"fintech-backend","timestamp":"2025-10-18T07:43:40.711Z"}
