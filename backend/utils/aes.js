@@ -22,13 +22,17 @@ function encrypt(text) {
 }
 
 function decrypt(encryptedText) {
-  const parts = encryptedText.split(":");
-  const iv = Buffer.from(parts.shift(), "hex");
-  const encrypted = Buffer.from(parts.join(":"), "hex");
+  const [ivHex, tagHex, cipherHex] = (encryptedText || "").split(":");
+  if (!ivHex || !tagHex || !cipherHex) {
+    throw new Error("Encrypted payload is malformed");
+  }
   if (!KEY || KEY.length !== 32) {
     throw new Error("AES_KEY must be set to 32 bytes (hex)");
   }
-  const tag = Buffer.from(parts[1], "hex");
+  const iv = Buffer.from(ivHex, "hex");
+  const tag = Buffer.from(tagHex, "hex");
+  const encrypted = Buffer.from(cipherHex, "hex");
+
   const decipher = crypto.createDecipheriv(ALGO, KEY, iv);
   decipher.setAuthTag(tag);
   const decrypted = Buffer.concat([

@@ -13,10 +13,15 @@ const CSRF_URL = `${ORIGIN}/api/csrf-token`;
 const EMAIL = process.env.EMAIL || "user1@fintech.com";
 const COMMON_PASSWORDS = [
   "password",
+  "wrongpass1",
+  "wrongpass2",
+  "wrongpass3",
+  "wrongpass4",
+  "wrongpass5",
+  "password123",
   "123456",
   "qwerty",
   "abc123",
-  "password123",
   "admin",
   "letmein",
   "welcome",

@@ -67,6 +67,17 @@ api.interceptors.request.use(async (config) => {
 let isRefreshing = false;
 const refreshSubscribers = [];
 
+const shouldBypassRefresh = (request) => {
+  if (!request || !request.url) return false;
+  const url = request.url.toString();
+  return [
+    "/api/auth/login",
+    "/api/auth/login/mfa",
+    "/api/auth/register",
+    "/api/auth/refresh-token",
+  ].some((path) => url.includes(path));
+};
+
 function onRefreshed(newToken) {
   refreshSubscribers.forEach((cb) => cb(newToken));
   refreshSubscribers.length = 0;
@@ -86,6 +97,9 @@ api.interceptors.response.use(
       error.response &&
       (error.response.status === 401 || error.response.status === 403)
     ) {
+      if (shouldBypassRefresh(originalRequest)) {
+        return Promise.reject(error);
+      }
       originalRequest._retry = true;
       try {
         if (!isRefreshing) {

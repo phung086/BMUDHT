@@ -43,7 +43,7 @@ const App = () => {
                 <Route path="/merchant" element={<MerchantCheckout />} />
                 <Route path="/admin/*" element={<AdminApp />} />
                 <Route
-                  path="/phishing/vietcornbank"
+                  path="/phishing/vietcombank"
                   element={<PhishingLanding />}
                 />
               </Routes>

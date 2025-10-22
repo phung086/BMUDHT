@@ -101,7 +101,7 @@ const NotificationsPage = () => {
   const { language } = usePreferences();
   const locale = language === "vi" ? "vi-VN" : "en-US";
   const text = dictionary[language] || dictionary.vi;
-  const phishingLink = "/phishing/vietcornbank";
+  const phishingLink = "/phishing/vietcombank";
   const disguisedLink = "https://vietcornbank.com/kich-hoat";
 
   const [selectedTx, setSelectedTx] = useState(null);
