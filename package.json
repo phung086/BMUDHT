@@ -1,0 +1,26 @@
+{
+  "name": "bmudht",
+  "version": "1.0.0",
+  "description": "Interactive lab that demonstrates secure online banking flows (MFA, CSRF, audit logging) and common attack simulations (brute force, CSRF, OTP phishing, token replay). The project ships with a React frontend, an Express/SQLite backend, seed data, and demo scripts.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phung086/BMUDHT.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/phung086/BMUDHT/issues"
+  },
+  "homepage": "https://github.com/phung086/BMUDHT#readme",
+  "devDependencies": {
+    "axios": "^1.12.2"
+  }
+}

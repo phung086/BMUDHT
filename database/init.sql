@@ -21,3 +21,10 @@ INSERT INTO logs (userId, action, details, ipAddress) VALUES
 (2, 'login', 'Successful login', '127.0.0.1'),
 (3, 'transfer', 'Transfer to user2', '127.0.0.1'),
 (1, 'admin_action', 'Viewed logs', '127.0.0.1');
+
+-- Insert sample credit request and card to support demo
+INSERT INTO credit_requests (userId, fullName, dateOfBirth, email, phone, nationalId, incomeLevel, status)
+VALUES (2, 'Nguyen Van A', '1995-05-12', 'user1@fintech.com', '+84901234567', '012345678901', '15,000,000 VND', 'approved');
+
+INSERT INTO credit_cards (userId, requestId, cardNumber, expiryMonth, expiryYear, cvv, creditLimit, status)
+VALUES (2, 1, '4111111111111111', 12, 2028, '123', 60000.00, 'active');

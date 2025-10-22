@@ -17,6 +17,9 @@ const copy = {
     homeAria: "Trang chủ",
     notificationsAria: "Thông báo",
     profileAria: "Hồ sơ cá nhân",
+    creditAria: "Cổng thẻ tín dụng",
+    fraudAria: "Mô phỏng kẻ gian",
+    merchantAria: "Cổng thanh toán thương mại",
     authLogin: "Đăng nhập",
     authRegister: "Tạo tài khoản",
     authAdmin: "Quản trị",
@@ -34,6 +37,9 @@ const copy = {
     homeAria: "Home",
     notificationsAria: "Notifications",
     profileAria: "Profile",
+    creditAria: "Credit Portal",
+    fraudAria: "Attacker Simulation",
+    merchantAria: "Merchant Checkout",
     authLogin: "Login",
     authRegister: "Create Account",
     authAdmin: "Admin Portal",
@@ -135,7 +141,7 @@ const NavBar = () => {
             !token
               ? "/"
               : isAdmin && location.pathname.startsWith("/admin")
-              ? "/admin"
+              ? "/admin/credit"
               : "/dashboard"
           }
         >
@@ -172,9 +178,18 @@ const NavBar = () => {
               >
                 <i className="bi bi-house-door"></i>
               </Link>
+              <Link
+                to="/credit"
+                className={`app-navbar__icon ${
+                  isActive("/credit") ? "is-active" : ""
+                }`}
+                aria-label={text.creditAria}
+              >
+                <i className="bi bi-credit-card-2-front"></i>
+              </Link>
               {isAdmin && (
                 <Link
-                  to="/admin"
+                  to="/admin/credit"
                   className={`app-navbar__icon ${
                     isActive("/admin") ? "is-active" : ""
                   }`}
@@ -183,6 +198,24 @@ const NavBar = () => {
                   <i className="bi bi-shield-lock"></i>
                 </Link>
               )}
+              <Link
+                to="/fraud-sim"
+                className={`app-navbar__icon ${
+                  isActive("/fraud-sim") ? "is-active" : ""
+                }`}
+                aria-label={text.fraudAria}
+              >
+                <i className="bi bi-incognito"></i>
+              </Link>
+              <Link
+                to="/merchant"
+                className={`app-navbar__icon ${
+                  isActive("/merchant") ? "is-active" : ""
+                }`}
+                aria-label={text.merchantAria}
+              >
+                <i className="bi bi-bag-check"></i>
+              </Link>
               <Link
                 to="/notifications"
                 className={`app-navbar__icon ${

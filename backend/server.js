@@ -15,6 +15,8 @@ const winston = require("winston");
 const authRoutes = require("./routes/auth");
 const transactionRoutes = require("./routes/transactions");
 const adminRoutes = require("./routes/admin");
+const creditRoutes = require("./routes/credit");
+const fraudRoutes = require("./routes/fraud");
 
 // Initialize Express app
 const app = express();
@@ -116,10 +118,17 @@ sequelize
   .then(() => logger.info("Database connected"))
   .catch((err) => logger.error("Database connection failed:", err));
 
+sequelize
+  .sync()
+  .then(() => logger.info("Database synced"))
+  .catch((err) => logger.error("Database sync failed:", err));
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/credit", creditRoutes);
+app.use("/api/fraud", fraudRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

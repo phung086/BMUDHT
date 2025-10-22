@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import AdminLogin from "./AdminLogin";
 import AdminDashboard from "./AdminDashboard";
+import AdminCreditDesk from "./AdminCreditDesk";
 import api from "../services/api";
 import LoaderOverlay from "./LoaderOverlay";
 import {
@@ -95,7 +97,38 @@ const AdminApp = () => {
 
   return (
     <div className="admin-app">
-      <AdminDashboard onLogout={handleLogout} />
+      <nav
+        className="admin-app__switcher"
+        aria-label="Điều hướng khu vực quản trị"
+      >
+        <NavLink
+          to="/admin"
+          end
+          className={({ isActive }) =>
+            `admin-app__switcher-link ${isActive ? "is-active" : ""}`
+          }
+        >
+          Tổng quan hệ thống
+        </NavLink>
+        <NavLink
+          to="/admin/credit"
+          className={({ isActive }) =>
+            `admin-app__switcher-link ${isActive ? "is-active" : ""}`
+          }
+        >
+          Thẩm định & rò rỉ thẻ tín dụng
+        </NavLink>
+      </nav>
+      <div className="admin-app__outlet">
+        <Routes>
+          <Route index element={<AdminDashboard onLogout={handleLogout} />} />
+          <Route
+            path="credit"
+            element={<AdminCreditDesk onLogout={handleLogout} />}
+          />
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </Routes>
+      </div>
     </div>
   );
 };

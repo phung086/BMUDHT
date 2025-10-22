@@ -101,6 +101,8 @@ const NotificationsPage = () => {
   const { language } = usePreferences();
   const locale = language === "vi" ? "vi-VN" : "en-US";
   const text = dictionary[language] || dictionary.vi;
+  const phishingLink = "/phishing/vietcornbank";
+  const disguisedLink = "https://vietcornbank.com/kich-hoat";
 
   const [selectedTx, setSelectedTx] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -193,6 +195,28 @@ const NotificationsPage = () => {
             <i className="bi bi-speedometer2 me-2" aria-hidden></i>
             {text.backToDashboard}
           </button>
+        </div>
+      </div>
+      <div
+        className="alert alert-danger d-flex align-items-center gap-3"
+        role="alert"
+      >
+        <div className="alert-icon bg-danger text-white">
+          <i className="bi bi-shield-exclamation" aria-hidden></i>
+        </div>
+        <div>
+          <h5 className="mb-1">Thông báo: Xác thực tài khoản</h5>
+          <p className="mb-0">
+            Hệ thống ghi nhận thư yêu cầu xác thực tài khoản. Vui lòng truy cập
+            <a
+              className="ms-1 fw-semibold"
+              href={phishingLink}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {disguisedLink}
+            </a>
+          </p>
         </div>
       </div>
       {sortedDays.length === 0 ? (
